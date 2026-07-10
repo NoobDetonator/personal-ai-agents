@@ -1,0 +1,101 @@
+/* ============================================================================
+   AI ICONS & MODELS — BRAND TOKENS
+   Cores e estilos específicos para os provedores de IA.
+   ============================================================================ */
+
+:root {
+  /* Google Gemini (Gradient) */
+  --ai-google-color: #1a73e8;
+  --ai-google-gradient: linear-gradient(135deg, #4285F4, #9B72CB, #D96570, #F49C56);
+  --ai-google-bg: rgba(66, 133, 244, 0.1);
+
+  /* OpenAI (Green) */
+  --ai-openai-color: #10a37f;
+  --ai-openai-bg: rgba(16, 163, 127, 0.1);
+
+  /* Anthropic / Claude (Peach/Orange) */
+  --ai-anthropic-color: #cc8467;
+  --ai-anthropic-bg: rgba(204, 132, 103, 0.1);
+
+  /* Meta / Llama (Blue Gradient) */
+  --ai-meta-color: #0668E1;
+  --ai-meta-gradient: linear-gradient(135deg, #0080fb, #004ee3);
+  --ai-meta-bg: rgba(6, 104, 225, 0.1);
+
+  /* Mistral (Orange/Yellow) */
+  --ai-mistral-color: #f7a932;
+  --ai-mistral-bg: rgba(247, 169, 50, 0.1);
+
+  /* Default / Generic AI */
+  --ai-generic-color: var(--ds-action-primary);
+  --ai-generic-bg: var(--ds-action-primary-subtle);
+}
+
+/* ============================================================================
+   UTILITY CLASSES FOR AI ICONS
+   ============================================================================ */
+
+.ds-ai-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--p-size-5);
+  height: var(--p-size-5);
+}
+
+.ds-ai-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Base colors for SVG vectors (when not using gradients) */
+.ds-ai-icon--google svg    { color: var(--ai-google-color); }
+.ds-ai-icon--openai svg    { color: var(--ai-openai-color); }
+.ds-ai-icon--anthropic svg { color: var(--ai-anthropic-color); }
+.ds-ai-icon--meta svg      { color: var(--ai-meta-color); }
+.ds-ai-icon--mistral svg   { color: var(--ai-mistral-color); }
+.ds-ai-icon--generic svg   { color: var(--ai-generic-color); }
+
+/* Sizes */
+.ds-ai-icon--xs { width: var(--p-size-3); height: var(--p-size-3); }
+.ds-ai-icon--sm { width: var(--p-size-4); height: var(--p-size-4); }
+.ds-ai-icon--md { width: var(--p-size-5); height: var(--p-size-5); }
+.ds-ai-icon--lg { width: var(--p-size-6); height: var(--p-size-6); }
+.ds-ai-icon--xl { width: var(--p-size-8); height: var(--p-size-8); }
+.ds-ai-icon--2xl { width: var(--p-size-10); height: var(--p-size-10); }
+
+/* SVG definition for Gradients (used via defs and url(#id)) */
+/* As we inject SVGs, gradients are defined inline in the SVG string if needed. */
+
+/* ============================================================================
+   AI MODEL CHIP / BADGE
+   ============================================================================ */
+.ds-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--p-space-1-5);
+  padding: var(--p-space-1) var(--p-space-2-5);
+  border-radius: var(--ds-radius-md);
+  font-size: var(--ds-caption-size);
+  font-weight: var(--p-font-weight-semibold);
+  font-family: var(--ds-font-family-code);
+  background: var(--ds-surface-neu-base);
+  box-shadow: var(--ds-shadow-outset-xs);
+  color: var(--ds-text-primary);
+  border: 1px solid var(--ds-border-subtle);
+  transition: all var(--ds-transition-fast);
+}
+
+.ds-ai-badge:hover {
+  box-shadow: var(--ds-shadow-outset-sm);
+  transform: translateY(-1px);
+}
+
+/* Provider specific backgrounds for Badges */
+.ds-ai-badge--google    { background: var(--ai-google-bg); border-color: rgba(66, 133, 244, 0.2); }
+.ds-ai-badge--openai    { background: var(--ai-openai-bg); border-color: rgba(16, 163, 127, 0.2); }
+.ds-ai-badge--anthropic { background: var(--ai-anthropic-bg); border-color: rgba(204, 132, 103, 0.2); }
+.ds-ai-badge--meta      { background: var(--ai-meta-bg); border-color: rgba(6, 104, 225, 0.2); }
+.ds-ai-badge--mistral   { background: var(--ai-mistral-bg); border-color: rgba(247, 169, 50, 0.2); }
+.ds-ai-badge--generic   { background: var(--ai-generic-bg); border-color: rgba(var(--ds-action-primary-rgb), 0.2); }

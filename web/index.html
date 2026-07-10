@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal AI Agents — Painel</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="foundations.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="motion.css">
+  <link rel="stylesheet" href="ai-icons.css">
+  <link rel="stylesheet" href="agent-icons.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="confirm-banner" class="confirm-banner hidden"></div>
+
+  <div class="app-layout">
+    <aside class="ds-sidebar">
+      <div class="ds-sidebar__logo">
+        <div class="app-logo-icon"><i data-lucide="hexagon" class="ds-icon ds-icon--lg" style="color:var(--ds-action-primary)"></i></div>
+        <span class="ds-sidebar__logo-text">Agents<span>.</span></span>
+      </div>
+
+      <nav class="ds-sidebar__nav" id="nav">
+        <button class="ds-sidebar__item is-active" data-view="overview"><i data-lucide="layout-dashboard" class="ds-icon ds-icon--sm"></i> Visão geral</button>
+        <button class="ds-sidebar__item" data-view="live"><i data-lucide="messages-square" class="ds-icon ds-icon--sm"></i> Chat ao vivo</button>
+        <button class="ds-sidebar__item" data-view="agents"><i data-lucide="users" class="ds-icon ds-icon--sm"></i> Agentes</button>
+        <button class="ds-sidebar__item" data-view="board"><i data-lucide="kanban-square" class="ds-icon ds-icon--sm"></i> Board</button>
+        <button class="ds-sidebar__item" data-view="skills"><i data-lucide="sparkles" class="ds-icon ds-icon--sm"></i> Skills</button>
+        <button class="ds-sidebar__item" data-view="settings"><i data-lucide="settings" class="ds-icon ds-icon--sm"></i> Configurações</button>
+      </nav>
+
+      <div class="ds-sidebar__footer">
+        <div class="ds-inline ds-inline-md app-conn-row">
+          <span class="app-conn-dot" id="conn-dot"></span>
+          <span class="ds-caption" id="conn-status">desconectado</span>
+        </div>
+        <label class="ds-switch" style="margin-top:12px;">
+          <input type="checkbox" class="ds-switch__input" id="themeToggle">
+          <span class="ds-switch__track"><span class="ds-switch__thumb"></span></span>
+          <span class="ds-switch__label ds-caption">Light mode</span>
+        </label>
+      </div>
+    </aside>
+
+    <main class="app-main">
+      <header class="app-topbar">
+        <span class="ds-chip" id="top-model"><i data-lucide="cpu" class="ds-icon ds-icon--xs"></i> —</span>
+        <span class="ds-chip" id="top-shell"><i data-lucide="terminal" class="ds-icon ds-icon--xs"></i> shell: —</span>
+        <span class="ds-chip" id="top-tokens"><i data-lucide="coins" class="ds-icon ds-icon--xs"></i> —</span>
+      </header>
+
+      <section id="view-overview" class="app-view"></section>
+      <section id="view-live" class="app-view hidden">
+        <h2 class="ds-heading-2xl" style="margin-bottom:16px;">Chat ao vivo</h2>
+        <div id="live-feed" class="live-feed"></div>
+      </section>
+      <section id="view-agents" class="app-view hidden"></section>
+      <section id="view-agent-detail" class="app-view hidden"></section>
+      <section id="view-board" class="app-view hidden"></section>
+      <section id="view-skills" class="app-view hidden"></section>
+      <section id="view-settings" class="app-view hidden"></section>
+    </main>
+  </div>
+
+  <script src="ai-icons.js"></script>
+  <script src="agent-icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

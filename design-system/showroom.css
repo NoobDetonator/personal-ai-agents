@@ -1,0 +1,220 @@
+/* ============================================================================
+   SHOWROOM — Layout & styles specific to the documentation page.
+   Not part of the DS itself. Only used by index.html.
+   ============================================================================ */
+
+/* Page layout */
+body {
+  display: flex;
+  min-height: 100vh;
+}
+
+.showroom-sidebar {
+  width: 260px;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.showroom-main {
+  flex: 1;
+  padding: var(--p-space-8) var(--p-space-10);
+  max-width: 1000px;
+  overflow-y: auto;
+}
+
+.showroom-section {
+  min-height: 60vh;
+}
+
+.showroom-section__header {
+  margin-bottom: var(--p-space-6);
+}
+
+/* Architecture diagram */
+.showroom-architecture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--p-space-3);
+  padding: var(--p-space-6) 0;
+}
+
+.arch-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--p-space-1);
+  padding: var(--p-space-4) var(--p-space-8);
+  border-radius: var(--ds-radius-xl);
+  width: 360px;
+  text-align: center;
+}
+
+.arch-primitive {
+  background: var(--ds-action-primary-subtle);
+  box-shadow: var(--ds-shadow-outset-sm);
+}
+.arch-semantic {
+  background: var(--ds-feedback-info-bg);
+  box-shadow: var(--ds-shadow-outset-sm);
+}
+.arch-component {
+  background: var(--ds-feedback-success-bg);
+  box-shadow: var(--ds-shadow-outset-sm);
+}
+
+.arch-arrow {
+  color: var(--ds-text-disabled);
+  width: 20px; height: 20px;
+}
+
+/* Shadow demos */
+.showroom-shadow-demo {
+  background: var(--ds-surface-neu-base);
+  border-radius: var(--ds-radius-lg);
+  padding: var(--p-space-6);
+  text-align: center;
+  font-size: var(--ds-caption-size);
+  font-weight: var(--p-font-weight-medium);
+  color: var(--ds-text-muted);
+}
+
+/* Surface demos */
+.showroom-surface-demo {
+  border-radius: var(--ds-radius-lg);
+  padding: var(--p-space-6);
+  text-align: center;
+  font-size: var(--ds-caption-size);
+  font-weight: var(--p-font-weight-medium);
+  color: var(--ds-text-muted);
+  box-shadow: var(--ds-shadow-outset-sm);
+}
+
+/* Keyboard hint */
+.showroom-kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-caption-size);
+  background: var(--ds-surface-sunken);
+  border-radius: var(--p-radius-sm);
+  box-shadow: var(--ds-shadow-outset-xs);
+  color: var(--ds-text-secondary);
+}
+
+/* Layout demo boxes */
+.showroom-box {
+  background: var(--ds-action-primary-subtle);
+  color: var(--ds-action-primary);
+  padding: var(--p-space-2) var(--p-space-3);
+  border-radius: var(--ds-radius-sm);
+  font-size: var(--ds-caption-size);
+  font-weight: var(--p-font-weight-medium);
+  text-align: center;
+}
+
+/* Motion card for replay */
+.showroom-motion-card {
+  position: relative;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Color ramp swatches */
+.showroom-color-ramp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-2);
+}
+
+.showroom-color-ramp__title {
+  font-weight: var(--p-font-weight-semibold);
+  font-size: var(--ds-body-sm-size);
+  margin-bottom: var(--p-space-1);
+  text-transform: capitalize;
+}
+
+.showroom-color-ramp__row {
+  display: flex;
+  gap: 2px;
+  border-radius: var(--ds-radius-md);
+  overflow: hidden;
+}
+
+.showroom-color-swatch {
+  flex: 1;
+  height: 48px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+  font-size: 9px;
+  font-weight: var(--p-font-weight-bold);
+  transition: transform var(--ds-transition-micro);
+}
+
+.showroom-color-swatch:hover {
+  transform: scaleY(1.2);
+  z-index: 1;
+}
+
+/* Spacing scale visual */
+.showroom-space-item {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-3);
+  margin-bottom: var(--p-space-1-5);
+}
+
+.showroom-space-bar {
+  background: var(--ds-action-primary-subtle);
+  border-radius: var(--p-radius-xs);
+  height: 16px;
+  transition: width var(--ds-transition-normal);
+}
+
+.showroom-space-label {
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-caption-size);
+  color: var(--ds-text-muted);
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.showroom-space-value {
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-caption-size);
+  color: var(--ds-text-disabled);
+  min-width: 40px;
+}
+
+/* Radius demo */
+.showroom-radius-demo {
+  width: 64px; height: 64px;
+  background: var(--ds-surface-neu-base);
+  box-shadow: var(--ds-shadow-outset-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--ds-caption-size);
+  color: var(--ds-text-muted);
+  gap: 2px;
+}
+
+/* Logo icon animation */
+.showroom-logo-icon {
+  animation: ds-emphasis-pulse 3s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .showroom-sidebar {
+    display: none;
+  }
+  .showroom-main {
+    padding: var(--p-space-5);
+  }
+}

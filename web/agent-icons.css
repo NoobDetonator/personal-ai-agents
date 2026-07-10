@@ -1,0 +1,38 @@
+/* ============================================================================
+   AGENT ICONS — CSS
+   ============================================================================ */
+
+.ds-agent-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--p-size-5);
+  height: var(--p-size-5);
+}
+
+.ds-agent-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Sizes */
+.ds-agent-icon--xs { width: var(--p-size-3); height: var(--p-size-3); }
+.ds-agent-icon--sm { width: var(--p-size-4); height: var(--p-size-4); }
+.ds-agent-icon--md { width: var(--p-size-5); height: var(--p-size-5); }
+.ds-agent-icon--lg { width: var(--p-size-6); height: var(--p-size-6); }
+.ds-agent-icon--xl { width: var(--p-size-8); height: var(--p-size-8); }
+.ds-agent-icon--2xl { width: var(--p-size-10); height: var(--p-size-10); }
+
+/* Role based colors (Optional use) */
+.ds-agent-icon--aria { color: var(--ds-action-primary); }
+.ds-agent-icon--security { color: var(--ds-feedback-danger); }
+.ds-agent-icon--tester { color: var(--ds-feedback-warning); }
+.ds-agent-icon--coder { color: var(--ds-feedback-info); }
+.ds-agent-icon--reviewer { color: var(--ds-feedback-success); }
+.ds-agent-icon--creative { color: var(--ds-feedback-violet); }

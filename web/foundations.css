@@ -1,0 +1,364 @@
+/* ============================================================================
+   FOUNDATIONS — NEUMORPHIC DESIGN SYSTEM
+   Reset profissional, tipografia global, focus, reduced-motion, scrollbar,
+   grid, selection — regras aplicadas, não componentes.
+   ============================================================================ */
+
+/* ---------- Reset profissional ---------- */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  tab-size: 4;
+  font-size: 100%;
+}
+
+body {
+  font-family: var(--ds-font-family-body);
+  font-size: var(--ds-body-md-size);
+  font-weight: var(--ds-body-md-weight);
+  line-height: var(--ds-body-md-lh);
+  color: var(--ds-text-primary);
+  background: var(--ds-surface-neu-base);
+  min-height: 100dvh;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+img, picture, video { height: auto; }
+
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--ds-action-primary);
+  text-decoration: none;
+  transition: color var(--ds-transition-micro);
+}
+a:hover { color: var(--ds-action-primary-hover); }
+
+button { cursor: pointer; }
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+[hidden], .ds-hidden {
+  display: none !important;
+}
+
+/* ---------- Tipografia global (escala modular) ---------- */
+
+.ds-heading-4xl {
+  font-size: var(--ds-heading-4xl-size);
+  font-weight: var(--ds-heading-4xl-weight);
+  line-height: var(--ds-heading-4xl-lh);
+  letter-spacing: var(--ds-heading-4xl-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-heading-3xl {
+  font-size: var(--ds-heading-3xl-size);
+  font-weight: var(--ds-heading-3xl-weight);
+  line-height: var(--ds-heading-3xl-lh);
+  letter-spacing: var(--ds-heading-3xl-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-heading-2xl {
+  font-size: var(--ds-heading-2xl-size);
+  font-weight: var(--ds-heading-2xl-weight);
+  line-height: var(--ds-heading-2xl-lh);
+  letter-spacing: var(--ds-heading-2xl-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-heading-xl {
+  font-size: var(--ds-heading-xl-size);
+  font-weight: var(--ds-heading-xl-weight);
+  line-height: var(--ds-heading-xl-lh);
+  letter-spacing: var(--ds-heading-xl-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-heading-lg {
+  font-size: var(--ds-heading-lg-size);
+  font-weight: var(--ds-heading-lg-weight);
+  line-height: var(--ds-heading-lg-lh);
+  letter-spacing: var(--ds-heading-lg-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-heading-md {
+  font-size: var(--ds-heading-md-size);
+  font-weight: var(--ds-heading-md-weight);
+  line-height: var(--ds-heading-md-lh);
+  letter-spacing: var(--ds-heading-md-ls);
+  color: var(--ds-text-primary);
+}
+
+.ds-body-lg {
+  font-size: var(--ds-body-lg-size);
+  font-weight: var(--ds-body-lg-weight);
+  line-height: var(--ds-body-lg-lh);
+}
+
+.ds-body-md {
+  font-size: var(--ds-body-md-size);
+  font-weight: var(--ds-body-md-weight);
+  line-height: var(--ds-body-md-lh);
+}
+
+.ds-body-sm {
+  font-size: var(--ds-body-sm-size);
+  font-weight: var(--ds-body-sm-weight);
+  line-height: var(--ds-body-sm-lh);
+}
+
+.ds-caption {
+  font-size: var(--ds-caption-size);
+  font-weight: var(--ds-caption-weight);
+  line-height: var(--ds-caption-lh);
+  color: var(--ds-text-muted);
+}
+
+.ds-overline {
+  font-size: var(--ds-overline-size);
+  font-weight: var(--ds-overline-weight);
+  line-height: var(--ds-overline-lh);
+  letter-spacing: var(--ds-overline-ls);
+  text-transform: uppercase;
+  color: var(--ds-text-muted);
+}
+
+.ds-code {
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-code-size);
+  font-weight: var(--ds-code-weight);
+}
+
+/* Text color utilities */
+.ds-text-primary   { color: var(--ds-text-primary); }
+.ds-text-secondary { color: var(--ds-text-secondary); }
+.ds-text-muted     { color: var(--ds-text-muted); }
+.ds-text-disabled  { color: var(--ds-text-disabled); }
+.ds-text-brand     { color: var(--ds-action-primary); }
+.ds-text-success   { color: var(--ds-feedback-success); }
+.ds-text-warning   { color: var(--ds-feedback-warning); }
+.ds-text-danger    { color: var(--ds-feedback-danger); }
+.ds-text-info      { color: var(--ds-feedback-info); }
+
+/* ---------- Focus Ring Global ---------- */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring-shadow);
+}
+
+/* Remove focus ring for mouse interaction */
+:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---------- prefers-reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Simulated reduced motion for showroom demo */
+[data-reduced-motion="true"] *, 
+[data-reduced-motion="true"] *::before, 
+[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ---------- Scrollbar Neumórfica ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ds-surface-sunken);
+  border-radius: var(--ds-radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ds-text-disabled);
+  border-radius: var(--ds-radius-full);
+  border: 2px solid var(--ds-surface-sunken);
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ds-text-muted);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-text-disabled) var(--ds-surface-sunken);
+}
+
+/* ---------- ::selection ---------- */
+::selection {
+  background: var(--ds-action-primary-subtle);
+  color: var(--ds-action-primary);
+}
+
+/* ---------- Layout Primitives ---------- */
+
+/* Stack: vertical flow with gap */
+.ds-stack {
+  display: flex;
+  flex-direction: column;
+}
+.ds-stack-xs { gap: var(--p-space-1); }
+.ds-stack-sm { gap: var(--p-space-2); }
+.ds-stack-md { gap: var(--p-space-4); }
+.ds-stack-lg { gap: var(--p-space-6); }
+.ds-stack-xl { gap: var(--p-space-8); }
+.ds-stack-2xl { gap: var(--p-space-12); }
+
+/* Inline: horizontal flow with gap */
+.ds-inline {
+  display: flex;
+  align-items: center;
+}
+.ds-inline-xs { gap: var(--p-space-1); }
+.ds-inline-sm { gap: var(--p-space-2); }
+.ds-inline-md { gap: var(--p-space-3); }
+.ds-inline-lg { gap: var(--p-space-4); }
+
+/* Cluster: wrapping horizontal flow */
+.ds-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ds-cluster-xs { gap: var(--p-space-1); }
+.ds-cluster-sm { gap: var(--p-space-2); }
+.ds-cluster-md { gap: var(--p-space-3); }
+.ds-cluster-lg { gap: var(--p-space-4); }
+
+/* Grid with auto-fill */
+.ds-grid {
+  display: grid;
+  gap: var(--p-space-4);
+}
+.ds-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.ds-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.ds-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.ds-grid-auto-sm { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.ds-grid-auto-md { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.ds-grid-auto-lg { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+
+/* Alignment utilities */
+.ds-items-start   { align-items: flex-start; }
+.ds-items-center  { align-items: center; }
+.ds-items-end     { align-items: flex-end; }
+.ds-justify-start  { justify-content: flex-start; }
+.ds-justify-center { justify-content: center; }
+.ds-justify-end    { justify-content: flex-end; }
+.ds-justify-between { justify-content: space-between; }
+
+/* ---------- Divider ---------- */
+.ds-divider {
+  border: none;
+  height: 1px;
+  background: var(--ds-border-default);
+  margin: var(--ds-space-stack-md) 0;
+}
+
+.ds-divider--subtle { background: var(--ds-border-subtle); }
+.ds-divider--strong { background: var(--ds-border-strong); }
+
+.ds-divider--vertical {
+  width: 1px;
+  height: auto;
+  min-height: 1em;
+  margin: 0 var(--ds-space-inline-md);
+  align-self: stretch;
+}
+
+/* ---------- Icon Base ---------- */
+.ds-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.ds-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.75;
+}
+
+.ds-icon--xs { width: var(--ds-icon-xs); height: var(--ds-icon-xs); }
+.ds-icon--sm { width: var(--ds-icon-sm); height: var(--ds-icon-sm); }
+.ds-icon--md { width: var(--ds-icon-md); height: var(--ds-icon-md); }
+.ds-icon--lg { width: var(--ds-icon-lg); height: var(--ds-icon-lg); }
+.ds-icon--xl { width: var(--ds-icon-xl); height: var(--ds-icon-xl); }
+
+/* ---------- Spinner ---------- */
+.ds-spinner {
+  display: inline-block;
+  border: 2px solid var(--ds-border-default);
+  border-top-color: var(--ds-action-primary);
+  border-radius: 50%;
+  animation: ds-spin 0.6s linear infinite;
+}
+
+.ds-spinner--sm { width: var(--p-size-4); height: var(--p-size-4); }
+.ds-spinner--md { width: var(--p-size-6); height: var(--p-size-6); }
+.ds-spinner--lg { width: var(--p-size-8); height: var(--p-size-8); }
+
+@keyframes ds-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Responsive breakpoints ---------- */
+@media (max-width: 640px) {
+  .ds-grid-2, .ds-grid-3, .ds-grid-4 { grid-template-columns: 1fr; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .ds-grid-3, .ds-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---------- Screen Reader Only ---------- */
+.ds-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

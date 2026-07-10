@@ -1,0 +1,44 @@
+# Dependências e artefatos de build
+node_modules/
+dist/
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+config.json
+
+# Perfil e estado pessoal
+USER.md
+PRODUCT.md
+data/
+workspace/
+
+# Banco SQLite e arquivos auxiliares
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Agentes criados durante o uso. Somente a soul padrão da Aria é versionada.
+agents/*
+!agents/aria/
+!agents/aria/soul.md
+
+# Caches e temporários locais
+.cache/
+cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+.DS_Store
+
+# Instalações locais de ferramentas e skills de terceiros
+.agents/
+.claude/skills/
+.impeccable/
+skills-lock.json

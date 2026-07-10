@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Noob Detonator — Design System</title>
+  <meta name="description" content="Design System Neumórfico completo: tokens, fundações, componentes, motion e documentação viva.">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="foundations.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="motion.css">
+  <link rel="stylesheet" href="ai-icons.css">
+  <link rel="stylesheet" href="agent-icons.css">
+  <link rel="stylesheet" href="showroom.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- ===== SIDEBAR NAVIGATION ===== -->
+  <aside class="ds-sidebar showroom-sidebar" id="sidebar">
+    <div class="ds-sidebar__logo">
+      <div class="showroom-logo-icon">
+        <i data-lucide="hexagon" style="width:28px;height:28px;color:var(--ds-action-primary)"></i>
+      </div>
+      <span class="ds-sidebar__logo-text">Noob<span>DS</span></span>
+    </div>
+
+    <nav class="ds-sidebar__nav" id="nav">
+      <button class="ds-sidebar__item is-active" data-section="principles">
+        <i data-lucide="compass"></i> Princípios
+      </button>
+      <button class="ds-sidebar__item" data-section="tokens">
+        <i data-lucide="palette"></i> Tokens
+      </button>
+      <button class="ds-sidebar__item" data-section="foundations">
+        <i data-lucide="layers"></i> Fundações
+      </button>
+      <button class="ds-sidebar__item" data-section="buttons">
+        <i data-lucide="mouse-pointer-click"></i> Buttons
+      </button>
+      <button class="ds-sidebar__item" data-section="forms">
+        <i data-lucide="text-cursor-input"></i> Forms
+      </button>
+      <button class="ds-sidebar__item" data-section="feedback">
+        <i data-lucide="message-square"></i> Feedback
+      </button>
+      <button class="ds-sidebar__item" data-section="cards">
+        <i data-lucide="square"></i> Cards
+      </button>
+      <button class="ds-sidebar__item" data-section="containers">
+        <i data-lucide="panel-top"></i> Containers
+      </button>
+      <button class="ds-sidebar__item" data-section="navigation">
+        <i data-lucide="navigation"></i> Navigation
+      </button>
+      <button class="ds-sidebar__item" data-section="data">
+        <i data-lucide="table-2"></i> Data
+      </button>
+      <button class="ds-sidebar__item" data-section="motion">
+        <i data-lucide="sparkles"></i> Motion
+      </button>
+      <button class="ds-sidebar__item" data-section="aimodels">
+        <i data-lucide="cpu"></i> AI Models
+      </button>
+      <button class="ds-sidebar__item" data-section="agentroles">
+        <i data-lucide="users"></i> Agent Roles
+      </button>
+      <button class="ds-sidebar__item" data-section="simulator">
+        <i data-lucide="layout-dashboard"></i> Simulator
+      </button>
+    </nav>
+
+    <div class="ds-sidebar__footer">
+      <div class="showroom-theme-switch">
+        <label class="ds-switch">
+          <input type="checkbox" class="ds-switch__input" id="themeToggle">
+          <span class="ds-switch__track">
+            <span class="ds-switch__thumb"></span>
+          </span>
+          <span class="ds-switch__label ds-caption">Light Mode</span>
+        </label>
+      </div>
+      <div class="showroom-reduced-motion" style="margin-top:12px;">
+        <label class="ds-switch">
+          <input type="checkbox" class="ds-switch__input" id="reducedMotionToggle">
+          <span class="ds-switch__track">
+            <span class="ds-switch__thumb"></span>
+          </span>
+          <span class="ds-switch__label ds-caption">Reduced Motion</span>
+        </label>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="showroom-main" id="main">
+
+    <!-- ========== PRINCIPLES ========== -->
+    <section class="showroom-section" id="section-principles">
+      <div class="showroom-section__header">
+        <h1 class="ds-heading-3xl">Noob Detonator Design System</h1>
+        <p class="ds-body-lg ds-text-muted" style="margin-top:8px;">Sistema neumórfico profissional — tokens, fundações, componentes, motion e acessibilidade.</p>
+      </div>
+
+      <div class="ds-grid ds-grid-2 ds-stagger" style="margin-top:32px;">
+        <div class="ds-card">
+          <div class="ds-inline ds-inline-md" style="margin-bottom:12px;">
+            <i data-lucide="hand" style="color:var(--ds-action-primary)"></i>
+            <h3 class="ds-heading-md">Tátil por Padrão</h3>
+          </div>
+          <p class="ds-body-sm ds-text-muted">Cada elemento comunica profundidade. Sombras outset/inset respondem a interação. Nada é plano sem propósito.</p>
+        </div>
+        <div class="ds-card">
+          <div class="ds-inline ds-inline-md" style="margin-bottom:12px;">
+            <i data-lucide="move" style="color:var(--ds-feedback-info)"></i>
+            <h3 class="ds-heading-md">Movimento com Propósito</h3>
+          </div>
+          <p class="ds-body-sm ds-text-muted">Nenhuma animação existe só para enfeitar. Motion orienta atenção, confirma ações e dá feedback sensorial.</p>
+        </div>
+        <div class="ds-card">
+          <div class="ds-inline ds-inline-md" style="margin-bottom:12px;">
+            <i data-lucide="accessibility" style="color:var(--ds-feedback-success)"></i>
+            <h3 class="ds-heading-md">Acessível por Padrão</h3>
+          </div>
+          <p class="ds-body-sm ds-text-muted">Contraste WCAG AA, focus-visible em todos os interativos, reduced-motion embutido. Acessibilidade não é exceção.</p>
+        </div>
+        <div class="ds-card">
+          <div class="ds-inline ds-inline-md" style="margin-bottom:12px;">
+            <i data-lucide="waves" style="color:var(--ds-feedback-violet)"></i>
+            <h3 class="ds-heading-md">Consistência Sensorial</h3>
+          </div>
+          <p class="ds-body-sm ds-text-muted">Mesmas curvas de easing, mesmos timings, mesma voz visual em cada componente. O sistema soa como uma peça só.</p>
+        </div>
+      </div>
+
+      <!-- Architecture diagram -->
+      <div class="ds-card" style="margin-top:32px; text-align:center;">
+        <h3 class="ds-heading-md" style="margin-bottom:16px;">Arquitetura de 3 Camadas</h3>
+        <div class="showroom-architecture">
+          <div class="arch-layer arch-primitive">
+            <span class="ds-overline">Camada 1</span>
+            <span class="ds-heading-md">Primitives</span>
+            <span class="ds-caption">gray-500, space-4, font-size-md</span>
+          </div>
+          <div class="arch-arrow"><i data-lucide="arrow-down"></i></div>
+          <div class="arch-layer arch-semantic">
+            <span class="ds-overline">Camada 2</span>
+            <span class="ds-heading-md">Semantic</span>
+            <span class="ds-caption">text-primary, surface-base, action-primary</span>
+          </div>
+          <div class="arch-arrow"><i data-lucide="arrow-down"></i></div>
+          <div class="arch-layer arch-component">
+            <span class="ds-overline">Camada 3</span>
+            <span class="ds-heading-md">Component</span>
+            <span class="ds-caption">btn-bg, card-shadow, input-radius</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== TOKENS ========== -->
+    <section class="showroom-section ds-hidden" id="section-tokens">
+      <h2 class="ds-heading-2xl">Tokens</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Arquitetura em 3 camadas: 7 matizes × 10 degraus, escala tipográfica modular, espaçamento base 4pt.</p>
+
+      <!-- Color Ramps -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Paleta de Cores</h3>
+      <div class="ds-stack ds-stack-lg" id="colorRamps"></div>
+
+      <hr class="ds-divider" style="margin:32px 0;">
+
+      <!-- Typography Scale -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Escala Tipográfica</h3>
+      <div class="ds-card--sunken ds-card" style="padding:24px;">
+        <div style="font-size:var(--p-font-size-4xl);font-weight:800;letter-spacing:-0.03em;margin-bottom:8px;">Heading 4XL — 48px</div>
+        <div style="font-size:var(--p-font-size-3xl);font-weight:700;letter-spacing:-0.03em;margin-bottom:8px;">Heading 3XL — 36px</div>
+        <div style="font-size:var(--p-font-size-2xl);font-weight:700;letter-spacing:-0.015em;margin-bottom:8px;">Heading 2XL — 28px</div>
+        <div style="font-size:var(--p-font-size-xl);font-weight:700;letter-spacing:-0.015em;margin-bottom:8px;">Heading XL — 22px</div>
+        <div style="font-size:var(--p-font-size-lg);font-weight:600;margin-bottom:8px;">Heading LG — 18px</div>
+        <div style="font-size:var(--p-font-size-md);font-weight:600;margin-bottom:8px;">Heading MD — 15px</div>
+        <hr class="ds-divider--subtle ds-divider">
+        <div style="font-size:var(--p-font-size-lg);margin-bottom:4px;">Body LG — 18px</div>
+        <div style="font-size:var(--p-font-size-md);margin-bottom:4px;">Body MD — 15px</div>
+        <div style="font-size:var(--p-font-size-sm);margin-bottom:4px;">Body SM — 13px</div>
+        <div class="ds-caption" style="margin-bottom:4px;">Caption — 11px</div>
+        <div class="ds-overline">OVERLINE — 10PX</div>
+        <div class="ds-code" style="margin-top:8px;">Code — JetBrains Mono 13px</div>
+      </div>
+
+      <hr class="ds-divider" style="margin:32px 0;">
+
+      <!-- Spacing Scale -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Escala de Espaçamento</h3>
+      <div class="ds-card--sunken ds-card" id="spacingScale"></div>
+
+      <hr class="ds-divider" style="margin:32px 0;">
+
+      <!-- Radius Scale -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Escala de Raio</h3>
+      <div class="ds-inline ds-cluster ds-cluster-lg" id="radiusScale"></div>
+    </section>
+
+    <!-- ========== FOUNDATIONS ========== -->
+    <section class="showroom-section ds-hidden" id="section-foundations">
+      <h2 class="ds-heading-2xl">Fundações</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Sombras neumórficas, superfícies, grid, foco, scrollbar.</p>
+
+      <!-- Neumorphic Shadows -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Sombras Neumórficas</h3>
+      <div class="ds-grid ds-grid-3" style="margin-bottom:32px;">
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-outset-xs);">Outset XS</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-outset-sm);">Outset SM</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-outset-md);">Outset MD</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-outset-lg);">Outset LG</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-outset-xl);">Outset XL</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-inset-sm);">Inset SM</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-inset-md);">Inset MD</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-inset-lg);">Inset LG</div>
+        <div class="showroom-shadow-demo" style="box-shadow:var(--ds-shadow-float-md);">Float MD</div>
+      </div>
+
+      <!-- Surfaces -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Superfícies</h3>
+      <div class="ds-grid ds-grid-4" style="margin-bottom:32px;">
+        <div class="showroom-surface-demo" style="background:var(--ds-surface-base);">Base</div>
+        <div class="showroom-surface-demo" style="background:var(--ds-surface-raised);">Raised</div>
+        <div class="showroom-surface-demo" style="background:var(--ds-surface-sunken);">Sunken</div>
+        <div class="showroom-surface-demo" style="background:var(--ds-surface-neu-base);">Neu Base</div>
+      </div>
+
+      <!-- Focus Ring -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Focus Ring</h3>
+      <p class="ds-body-sm ds-text-muted" style="margin-bottom:12px;">Pressione <kbd class="showroom-kbd">Tab</kbd> para navegar e ver o focus ring em ação.</p>
+      <div class="ds-inline ds-cluster ds-cluster-md">
+        <button class="ds-btn">Focável</button>
+        <input class="ds-input" style="width:200px;" placeholder="Focável" tabindex="0">
+        <a href="#" class="ds-btn ds-btn--ghost">Link focável</a>
+      </div>
+
+      <!-- Layout Primitives -->
+      <h3 class="ds-heading-lg" style="margin:32px 0 16px;">Layout Primitives</h3>
+      <div class="ds-grid ds-grid-3">
+        <div class="ds-card">
+          <h4 class="ds-heading-md" style="margin-bottom:8px;">Stack (vertical)</h4>
+          <div class="ds-stack ds-stack-sm">
+            <div class="showroom-box">Item 1</div>
+            <div class="showroom-box">Item 2</div>
+            <div class="showroom-box">Item 3</div>
+          </div>
+        </div>
+        <div class="ds-card">
+          <h4 class="ds-heading-md" style="margin-bottom:8px;">Inline (horizontal)</h4>
+          <div class="ds-inline ds-inline-sm">
+            <div class="showroom-box">A</div>
+            <div class="showroom-box">B</div>
+            <div class="showroom-box">C</div>
+          </div>
+        </div>
+        <div class="ds-card">
+          <h4 class="ds-heading-md" style="margin-bottom:8px;">Cluster (wrap)</h4>
+          <div class="ds-cluster ds-cluster-sm">
+            <div class="showroom-box">Tag</div>
+            <div class="showroom-box">Tag</div>
+            <div class="showroom-box">Tag</div>
+            <div class="showroom-box">Tag</div>
+            <div class="showroom-box">Tag</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== BUTTONS ========== -->
+    <section class="showroom-section ds-hidden" id="section-buttons">
+      <h2 class="ds-heading-2xl">Buttons</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">6 variantes × 3 tamanhos × 6 estados (default, hover, focus, active, disabled, loading).</p>
+
+      <!-- Variants -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Variantes</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <button class="ds-btn">Default</button>
+        <button class="ds-btn ds-btn--primary">Primary</button>
+        <button class="ds-btn ds-btn--ghost">Ghost</button>
+        <button class="ds-btn ds-btn--outline">Outline</button>
+        <button class="ds-btn ds-btn--danger">Danger</button>
+        <button class="ds-btn ds-btn--success">Success</button>
+      </div>
+
+      <!-- Sizes -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Tamanhos</h3>
+      <div class="ds-inline ds-inline-md" style="margin-bottom:24px;align-items:flex-end;">
+        <button class="ds-btn ds-btn--primary ds-btn--sm">Small</button>
+        <button class="ds-btn ds-btn--primary">Medium</button>
+        <button class="ds-btn ds-btn--primary ds-btn--lg">Large</button>
+      </div>
+
+      <!-- With Icons -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Com Ícones</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <button class="ds-btn ds-btn--primary"><i data-lucide="plus" style="width:16px;height:16px;"></i> Criar</button>
+        <button class="ds-btn"><i data-lucide="download" style="width:16px;height:16px;"></i> Exportar</button>
+        <button class="ds-btn ds-btn--danger"><i data-lucide="trash-2" style="width:16px;height:16px;"></i> Deletar</button>
+        <button class="ds-btn ds-btn--icon ds-btn--ghost"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
+        <button class="ds-btn ds-btn--icon"><i data-lucide="bell" style="width:18px;height:18px;"></i></button>
+      </div>
+
+      <!-- States -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Estados</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <button class="ds-btn ds-btn--primary">Default</button>
+        <button class="ds-btn ds-btn--primary" disabled>Disabled</button>
+        <button class="ds-btn ds-btn--primary ds-btn--loading">Loading</button>
+        <button class="ds-btn ds-btn--loading">Loading</button>
+        <button class="ds-btn ds-btn--danger ds-btn--loading">Loading</button>
+      </div>
+
+      <!-- Do's and Don'ts -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Do's & Don'ts</h3>
+      <div class="ds-grid ds-grid-2">
+        <div class="ds-alert ds-alert--success">
+          <div class="ds-alert__icon"><i data-lucide="check-circle"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">DO: Use Primary para a ação principal</div>
+            <div class="ds-alert__message">Apenas uma ação primary por contexto. Demais ações devem ser Default ou Ghost.</div>
+          </div>
+        </div>
+        <div class="ds-alert ds-alert--danger">
+          <div class="ds-alert__icon"><i data-lucide="x-circle"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">DON'T: Múltiplos Primary lado a lado</div>
+            <div class="ds-alert__message">Cria confusão hierárquica. Use variantes diferentes para ações secundárias.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== FORMS ========== -->
+    <section class="showroom-section ds-hidden" id="section-forms">
+      <h2 class="ds-heading-2xl">Forms</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Input, Textarea, Select, Checkbox, Radio, Switch e Field wrapper.</p>
+
+      <div class="ds-grid ds-grid-2" style="gap:24px;">
+        <!-- Input -->
+        <div class="ds-card">
+          <h3 class="ds-heading-md" style="margin-bottom:16px;">Input</h3>
+          <div class="ds-stack ds-stack-md">
+            <div class="ds-field">
+              <label class="ds-field__label">Nome</label>
+              <input class="ds-input" placeholder="Digite seu nome">
+            </div>
+            <div class="ds-field">
+              <label class="ds-field__label ds-field__label--required">Email</label>
+              <input class="ds-input ds-input--error" value="email@invalido" type="email">
+              <span class="ds-field__error"><i data-lucide="alert-circle" style="width:12px;height:12px;"></i> Email inválido</span>
+            </div>
+            <div class="ds-field">
+              <label class="ds-field__label">Disabled</label>
+              <input class="ds-input" disabled value="Não editável">
+            </div>
+            <div class="ds-field">
+              <label class="ds-field__label">Small</label>
+              <input class="ds-input ds-input--sm" placeholder="Input pequeno">
+            </div>
+            <div class="ds-field">
+              <label class="ds-field__label">Large</label>
+              <input class="ds-input ds-input--lg" placeholder="Input grande">
+            </div>
+          </div>
+        </div>
+
+        <!-- Textarea + Select -->
+        <div class="ds-card">
+          <h3 class="ds-heading-md" style="margin-bottom:16px;">Textarea & Select</h3>
+          <div class="ds-stack ds-stack-md">
+            <div class="ds-field">
+              <label class="ds-field__label">Descrição</label>
+              <textarea class="ds-textarea" placeholder="Descreva o agente..."></textarea>
+              <span class="ds-field__help">Máximo 500 caracteres</span>
+            </div>
+            <div class="ds-field">
+              <label class="ds-field__label">Modelo</label>
+              <select class="ds-select">
+                <option>Gemini 2.5 Pro</option>
+                <option>Gemini 2.5 Flash</option>
+                <option>GPT-4o</option>
+                <option>Claude 3.5</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Checkbox + Radio -->
+        <div class="ds-card">
+          <h3 class="ds-heading-md" style="margin-bottom:16px;">Checkbox & Radio</h3>
+          <div class="ds-stack ds-stack-md">
+            <label class="ds-checkbox">
+              <input type="checkbox" class="ds-checkbox__input" checked>
+              <span class="ds-checkbox__label">Auto-aprovação ativa</span>
+            </label>
+            <label class="ds-checkbox">
+              <input type="checkbox" class="ds-checkbox__input">
+              <span class="ds-checkbox__label">Logging detalhado</span>
+            </label>
+            <label class="ds-checkbox">
+              <input type="checkbox" class="ds-checkbox__input" disabled>
+              <span class="ds-checkbox__label">Desativado</span>
+            </label>
+            <hr class="ds-divider">
+            <label class="ds-radio">
+              <input type="radio" name="priority" class="ds-radio__input" checked>
+              <span class="ds-checkbox__label">Prioridade Alta</span>
+            </label>
+            <label class="ds-radio">
+              <input type="radio" name="priority" class="ds-radio__input">
+              <span class="ds-checkbox__label">Prioridade Média</span>
+            </label>
+            <label class="ds-radio">
+              <input type="radio" name="priority" class="ds-radio__input">
+              <span class="ds-checkbox__label">Prioridade Baixa</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Switch -->
+        <div class="ds-card">
+          <h3 class="ds-heading-md" style="margin-bottom:16px;">Switch</h3>
+          <div class="ds-stack ds-stack-md">
+            <label class="ds-switch">
+              <input type="checkbox" class="ds-switch__input" checked>
+              <span class="ds-switch__track"><span class="ds-switch__thumb"></span></span>
+              <span class="ds-switch__label">Notificações</span>
+            </label>
+            <label class="ds-switch">
+              <input type="checkbox" class="ds-switch__input">
+              <span class="ds-switch__track"><span class="ds-switch__thumb"></span></span>
+              <span class="ds-switch__label">Modo escuro</span>
+            </label>
+            <label class="ds-switch">
+              <input type="checkbox" class="ds-switch__input" checked>
+              <span class="ds-switch__track"><span class="ds-switch__thumb"></span></span>
+              <span class="ds-switch__label">Auto-save</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== FEEDBACK ========== -->
+    <section class="showroom-section ds-hidden" id="section-feedback">
+      <h2 class="ds-heading-2xl">Feedback & Status</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Badge, Chip, Tooltip, Alert, Toast, Progress, Skeleton.</p>
+
+      <!-- Badges -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Badges</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <span class="ds-badge">Neutral</span>
+        <span class="ds-badge ds-badge--brand"><span class="ds-badge__dot"></span> Brand</span>
+        <span class="ds-badge ds-badge--success"><span class="ds-badge__dot"></span> Success</span>
+        <span class="ds-badge ds-badge--warning"><span class="ds-badge__dot"></span> Warning</span>
+        <span class="ds-badge ds-badge--danger"><span class="ds-badge__dot"></span> Danger</span>
+        <span class="ds-badge ds-badge--info"><span class="ds-badge__dot"></span> Info</span>
+        <span class="ds-badge ds-badge--violet"><span class="ds-badge__dot"></span> Violet</span>
+      </div>
+
+      <!-- Chips -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Chips</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <span class="ds-chip"><i data-lucide="tag" style="width:12px;height:12px;"></i> Tag simples</span>
+        <span class="ds-chip ds-chip--interactive">Interativo</span>
+        <span class="ds-chip">Removível <button class="ds-chip__remove" aria-label="Remover">×</button></span>
+      </div>
+
+      <!-- Tooltips -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Tooltips</h3>
+      <div class="ds-inline ds-cluster ds-cluster-lg" style="margin-bottom:24px;">
+        <div class="ds-tooltip">
+          <button class="ds-btn ds-btn--sm">Top</button>
+          <span class="ds-tooltip__content ds-tooltip__content--top">Tooltip no topo</span>
+        </div>
+        <div class="ds-tooltip">
+          <button class="ds-btn ds-btn--sm">Bottom</button>
+          <span class="ds-tooltip__content ds-tooltip__content--bottom">Tooltip embaixo</span>
+        </div>
+        <div class="ds-tooltip">
+          <button class="ds-btn ds-btn--sm">Left</button>
+          <span class="ds-tooltip__content ds-tooltip__content--left">Esquerda</span>
+        </div>
+        <div class="ds-tooltip">
+          <button class="ds-btn ds-btn--sm">Right</button>
+          <span class="ds-tooltip__content ds-tooltip__content--right">Direita</span>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Alerts</h3>
+      <div class="ds-stack ds-stack-md" style="margin-bottom:24px;">
+        <div class="ds-alert ds-alert--info">
+          <div class="ds-alert__icon"><i data-lucide="info"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">Informação</div>
+            <div class="ds-alert__message">O agente Aria está processando 3 tarefas simultaneamente.</div>
+          </div>
+          <button class="ds-alert__dismiss" aria-label="Fechar"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+        </div>
+        <div class="ds-alert ds-alert--success">
+          <div class="ds-alert__icon"><i data-lucide="check-circle"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">Sucesso</div>
+            <div class="ds-alert__message">Tarefa concluída com êxito em 2.3 segundos.</div>
+          </div>
+        </div>
+        <div class="ds-alert ds-alert--warning">
+          <div class="ds-alert__icon"><i data-lucide="alert-triangle"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">Atenção</div>
+            <div class="ds-alert__message">O rate limit da API está em 85%. Considere reduzir a concorrência.</div>
+          </div>
+        </div>
+        <div class="ds-alert ds-alert--danger">
+          <div class="ds-alert__icon"><i data-lucide="alert-octagon"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">Erro Crítico</div>
+            <div class="ds-alert__message">Falha na conexão com o banco de dados. Tentando reconexão...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toasts -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Toasts</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:24px;">
+        <button class="ds-btn" onclick="showToast('info')"><i data-lucide="info" style="width:16px;height:16px;"></i> Info Toast</button>
+        <button class="ds-btn ds-btn--success" onclick="showToast('success')"><i data-lucide="check" style="width:16px;height:16px;"></i> Success Toast</button>
+        <button class="ds-btn" onclick="showToast('warning')" style="color:var(--ds-feedback-warning)"><i data-lucide="alert-triangle" style="width:16px;height:16px;"></i> Warning Toast</button>
+        <button class="ds-btn ds-btn--danger" onclick="showToast('danger')"><i data-lucide="x-circle" style="width:16px;height:16px;"></i> Danger Toast</button>
+      </div>
+
+      <!-- Progress -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Progress</h3>
+      <div class="ds-stack ds-stack-md" style="margin-bottom:24px; max-width:500px;">
+        <div>
+          <div class="ds-caption ds-text-muted" style="margin-bottom:6px;">Default — 65%</div>
+          <div class="ds-progress"><div class="ds-progress__bar" style="width:65%;"></div></div>
+        </div>
+        <div>
+          <div class="ds-caption ds-text-muted" style="margin-bottom:6px;">Success — 100%</div>
+          <div class="ds-progress ds-progress--success"><div class="ds-progress__bar" style="width:100%;"></div></div>
+        </div>
+        <div>
+          <div class="ds-caption ds-text-muted" style="margin-bottom:6px;">Warning — 85%</div>
+          <div class="ds-progress ds-progress--warning"><div class="ds-progress__bar" style="width:85%;"></div></div>
+        </div>
+        <div>
+          <div class="ds-caption ds-text-muted" style="margin-bottom:6px;">Danger — 20%</div>
+          <div class="ds-progress ds-progress--danger"><div class="ds-progress__bar" style="width:20%;"></div></div>
+        </div>
+      </div>
+
+      <!-- Circular Progress -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Progress Circular</h3>
+      <div class="ds-inline ds-inline-lg" style="margin-bottom:24px;">
+        <div class="ds-progress-circle" style="width:64px;height:64px;">
+          <svg viewBox="0 0 64 64"><circle class="ds-progress-circle__track" cx="32" cy="32" r="28"/><circle class="ds-progress-circle__fill" cx="32" cy="32" r="28" stroke-dasharray="175.93" stroke-dashoffset="61.58"/></svg>
+          <span class="ds-progress-circle__label">65%</span>
+        </div>
+        <div class="ds-progress-circle" style="width:64px;height:64px;">
+          <svg viewBox="0 0 64 64"><circle class="ds-progress-circle__track" cx="32" cy="32" r="28"/><circle class="ds-progress-circle__fill" cx="32" cy="32" r="28" stroke-dasharray="175.93" stroke-dashoffset="0" style="stroke:var(--ds-feedback-success);"/></svg>
+          <span class="ds-progress-circle__label">100</span>
+        </div>
+      </div>
+
+      <!-- Skeleton -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Skeleton</h3>
+      <div class="ds-grid ds-grid-2" style="margin-bottom:24px;">
+        <div class="ds-card">
+          <div class="ds-inline ds-inline-md" style="margin-bottom:16px;">
+            <div class="ds-skeleton ds-skeleton--avatar"></div>
+            <div style="flex:1;">
+              <div class="ds-skeleton ds-skeleton--text" style="width:60%;"></div>
+              <div class="ds-skeleton ds-skeleton--text" style="width:40%;"></div>
+            </div>
+          </div>
+          <div class="ds-skeleton ds-skeleton--text"></div>
+          <div class="ds-skeleton ds-skeleton--text"></div>
+          <div class="ds-skeleton ds-skeleton--text" style="width:80%;"></div>
+        </div>
+        <div class="ds-skeleton ds-skeleton--card"></div>
+      </div>
+    </section>
+
+    <!-- ========== CARDS ========== -->
+    <section class="showroom-section ds-hidden" id="section-cards">
+      <h2 class="ds-heading-2xl">Cards</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">5 variantes: raised, flat, sunken, convex, interactive. Com anatomia header/body/footer.</p>
+
+      <div class="ds-grid ds-grid-3 ds-stagger">
+        <div class="ds-card">
+          <div class="ds-card__header"><h4 class="ds-card__title">Raised (Default)</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Card padrão com sombra outset neumórfica. Ideal para conteúdo principal.</p></div>
+          <div class="ds-card__footer"><button class="ds-btn ds-btn--sm ds-btn--ghost">Ação</button></div>
+        </div>
+        <div class="ds-card ds-card--flat">
+          <div class="ds-card__header"><h4 class="ds-card__title">Flat</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Sem sombra. Para áreas de menor hierarquia visual.</p></div>
+          <div class="ds-card__footer"><button class="ds-btn ds-btn--sm ds-btn--ghost">Ação</button></div>
+        </div>
+        <div class="ds-card ds-card--sunken">
+          <div class="ds-card__header"><h4 class="ds-card__title">Sunken</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Sombra inset. Para containers de input ou áreas "cavadas".</p></div>
+          <div class="ds-card__footer"><button class="ds-btn ds-btn--sm ds-btn--ghost">Ação</button></div>
+        </div>
+        <div class="ds-card ds-card--convex">
+          <div class="ds-card__header"><h4 class="ds-card__title">Convex</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Gradiente convexo. Para destaque premium.</p></div>
+          <div class="ds-card__footer"><button class="ds-btn ds-btn--sm ds-btn--ghost">Ação</button></div>
+        </div>
+        <div class="ds-card ds-card--interactive">
+          <div class="ds-card__header"><h4 class="ds-card__title">Interactive</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Hover eleva, click pressiona. Para cards clicáveis.</p></div>
+        </div>
+        <div class="ds-card ds-card--selectable" onclick="this.classList.toggle('is-selected')">
+          <div class="ds-card__header"><h4 class="ds-card__title">Selectable</h4></div>
+          <div class="ds-card__body"><p class="ds-body-sm ds-text-muted">Clique para selecionar. Ring de brand.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== CONTAINERS ========== -->
+    <section class="showroom-section ds-hidden" id="section-containers">
+      <h2 class="ds-heading-2xl">Containers</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Accordion, Tabs, Modal, Drawer.</p>
+
+      <!-- Accordion -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Accordion</h3>
+      <div class="ds-accordion" style="margin-bottom:32px; max-width:600px;">
+        <div class="ds-accordion__item is-open">
+          <button class="ds-accordion__trigger" onclick="toggleAccordion(this)">
+            <span>Como funciona o sistema de agentes?</span>
+            <i data-lucide="chevron-down" class="ds-accordion__chevron"></i>
+          </button>
+          <div class="ds-accordion__panel" style="max-height:500px;">
+            <div class="ds-accordion__content">O sistema opera com agentes hierárquicos. O Principal delega tarefas a Managers, que por sua vez coordenam Workers especializados para execução.</div>
+          </div>
+        </div>
+        <div class="ds-accordion__item">
+          <button class="ds-accordion__trigger" onclick="toggleAccordion(this)">
+            <span>Quais modelos de IA são suportados?</span>
+            <i data-lucide="chevron-down" class="ds-accordion__chevron"></i>
+          </button>
+          <div class="ds-accordion__panel">
+            <div class="ds-accordion__content">Suportamos Gemini 2.5 Pro, Gemini 2.5 Flash, GPT-4o e Claude 3.5. Cada agente pode ser configurado com um modelo diferente.</div>
+          </div>
+        </div>
+        <div class="ds-accordion__item">
+          <button class="ds-accordion__trigger" onclick="toggleAccordion(this)">
+            <span>Como configurar auto-aprovação?</span>
+            <i data-lucide="chevron-down" class="ds-accordion__chevron"></i>
+          </button>
+          <div class="ds-accordion__panel">
+            <div class="ds-accordion__content">Na página de Settings, ative o toggle "Auto-approve". Isso permite que agentes executem ações sem solicitar confirmação manual.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Tabs</h3>
+      <div class="ds-tabs" style="margin-bottom:32px; max-width:600px;">
+        <div class="ds-tabs__list" role="tablist">
+          <button class="ds-tabs__tab is-active" role="tab" onclick="switchTab(this, 'tab-overview')">Overview</button>
+          <button class="ds-tabs__tab" role="tab" onclick="switchTab(this, 'tab-config')">Config</button>
+          <button class="ds-tabs__tab" role="tab" onclick="switchTab(this, 'tab-logs')">Logs</button>
+        </div>
+        <div class="ds-tabs__panel" id="tab-overview">
+          <p class="ds-body-sm ds-text-muted">Painel de visão geral do agente com métricas de desempenho e status atual.</p>
+        </div>
+        <div class="ds-tabs__panel" id="tab-config" hidden>
+          <p class="ds-body-sm ds-text-muted">Configurações do agente: modelo, temperatura, max tokens, system prompt.</p>
+        </div>
+        <div class="ds-tabs__panel" id="tab-logs" hidden>
+          <p class="ds-body-sm ds-text-muted">Feed de logs com mensagens, erros e tool calls em tempo real.</p>
+        </div>
+      </div>
+
+      <!-- Modal -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Modal</h3>
+      <button class="ds-btn ds-btn--primary" onclick="openModal()" style="margin-bottom:32px;">
+        <i data-lucide="maximize-2" style="width:16px;height:16px;"></i> Abrir Modal
+      </button>
+
+      <!-- Drawer -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Drawer</h3>
+      <button class="ds-btn" onclick="openDrawer()">
+        <i data-lucide="panel-right-open" style="width:16px;height:16px;"></i> Abrir Drawer
+      </button>
+    </section>
+
+    <!-- ========== NAVIGATION ========== -->
+    <section class="showroom-section ds-hidden" id="section-navigation">
+      <h2 class="ds-heading-2xl">Navigation</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Sidebar (ativa!), Breadcrumb, Pagination, Menu.</p>
+
+      <!-- Breadcrumb -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Breadcrumb</h3>
+      <nav class="ds-breadcrumb" style="margin-bottom:32px;">
+        <a href="#" class="ds-breadcrumb__item">Home</a>
+        <span class="ds-breadcrumb__separator"><i data-lucide="chevron-right" style="width:14px;height:14px;"></i></span>
+        <a href="#" class="ds-breadcrumb__item">Agentes</a>
+        <span class="ds-breadcrumb__separator"><i data-lucide="chevron-right" style="width:14px;height:14px;"></i></span>
+        <span class="ds-breadcrumb__item ds-breadcrumb__item--current">Aria</span>
+      </nav>
+
+      <!-- Pagination -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Pagination</h3>
+      <nav class="ds-pagination" style="margin-bottom:32px;">
+        <button class="ds-pagination__btn" disabled><i data-lucide="chevron-left" style="width:16px;height:16px;"></i></button>
+        <button class="ds-pagination__btn is-active">1</button>
+        <button class="ds-pagination__btn">2</button>
+        <button class="ds-pagination__btn">3</button>
+        <span class="ds-pagination__ellipsis">...</span>
+        <button class="ds-pagination__btn">12</button>
+        <button class="ds-pagination__btn"><i data-lucide="chevron-right" style="width:16px;height:16px;"></i></button>
+      </nav>
+
+      <!-- Menu -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Dropdown Menu</h3>
+      <div style="position:relative;display:inline-block;margin-bottom:32px;">
+        <button class="ds-btn" onclick="this.nextElementSibling.classList.toggle('is-open')">
+          <i data-lucide="more-vertical" style="width:16px;height:16px;"></i> Menu
+        </button>
+        <div class="ds-menu" style="top:calc(100% + 4px);left:0;">
+          <button class="ds-menu__item"><i data-lucide="edit-3" style="width:16px;height:16px;"></i> Editar</button>
+          <button class="ds-menu__item"><i data-lucide="copy" style="width:16px;height:16px;"></i> Duplicar</button>
+          <button class="ds-menu__item"><i data-lucide="archive" style="width:16px;height:16px;"></i> Arquivar</button>
+          <div class="ds-menu__separator"></div>
+          <button class="ds-menu__item ds-menu__item--danger"><i data-lucide="trash-2" style="width:16px;height:16px;"></i> Deletar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== DATA ========== -->
+    <section class="showroom-section ds-hidden" id="section-data">
+      <h2 class="ds-heading-2xl">Data</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Table, Avatar, Stat Cards, Empty State, List.</p>
+
+      <!-- Stat Cards -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Stat Cards</h3>
+      <div class="ds-grid ds-grid-4 ds-stagger" style="margin-bottom:32px;">
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Agentes Ativos</span>
+          <span class="ds-stat-card__value">7</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--up"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> +2 hoje</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Tarefas Completas</span>
+          <span class="ds-stat-card__value">142</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--up"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> +23%</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Tokens Gastos</span>
+          <span class="ds-stat-card__value">2.4M</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--down"><i data-lucide="trending-down" style="width:14px;height:14px;"></i> -5.2%</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Uptime</span>
+          <span class="ds-stat-card__value">99.7%</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--flat"><i data-lucide="minus" style="width:14px;height:14px;"></i> Estável</span>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Table</h3>
+      <div class="ds-table-wrapper" style="margin-bottom:32px;">
+        <table class="ds-table ds-table--hoverable">
+          <thead>
+            <tr>
+              <th><span class="ds-table__sortable">Agente <i data-lucide="arrow-up-down" style="width:12px;height:12px;"></i></span></th>
+              <th>Papel</th>
+              <th>Modelo</th>
+              <th><span class="ds-table__sortable">Status <i data-lucide="arrow-up-down" style="width:12px;height:12px;"></i></span></th>
+              <th>Tarefas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="ds-text-primary" style="font-weight:500;">Aria</td>
+              <td><span class="ds-badge ds-badge--violet"><span class="ds-badge__dot"></span> Principal</span></td>
+              <td><span class="ds-ai-badge ds-ai-badge--google" title="Gemini 2.5 Pro"><i data-ai-icon="google" class="ds-ai-icon"></i>Gemini 2.5 Pro</span></td>
+              <td><span class="ds-badge ds-badge--success"><span class="ds-badge__dot"></span> Online</span></td>
+              <td>42</td>
+            </tr>
+            <tr>
+              <td class="ds-text-primary" style="font-weight:500;">TaskForge</td>
+              <td><span class="ds-badge ds-badge--brand"><span class="ds-badge__dot"></span> Manager</span></td>
+              <td><span class="ds-ai-badge ds-ai-badge--openai" title="GPT-4o"><i data-ai-icon="openai" class="ds-ai-icon"></i>GPT-4o</span></td>
+              <td><span class="ds-badge ds-badge--warning"><span class="ds-badge__dot"></span> Busy</span></td>
+              <td>18</td>
+            </tr>
+            <tr>
+              <td class="ds-text-primary" style="font-weight:500;">CodeGen</td>
+              <td><span class="ds-badge">Worker</span></td>
+              <td><span class="ds-ai-badge ds-ai-badge--anthropic" title="Claude 3.5 Sonnet"><i data-ai-icon="anthropic" class="ds-ai-icon"></i>Claude 3.5</span></td>
+              <td><span class="ds-badge ds-badge--success"><span class="ds-badge__dot"></span> Online</span></td>
+              <td>56</td>
+            </tr>
+            <tr>
+              <td class="ds-text-primary" style="font-weight:500;">Debugger</td>
+              <td><span class="ds-badge">Worker</span></td>
+              <td><span class="ds-ai-badge ds-ai-badge--meta" title="Llama 3 (70B)"><i data-ai-icon="meta" class="ds-ai-icon"></i>Llama 3 (70B)</span></td>
+              <td><span class="ds-badge ds-badge--danger"><span class="ds-badge__dot"></span> Offline</span></td>
+              <td>3</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Avatars -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Avatars</h3>
+      <div class="ds-inline ds-inline-lg" style="margin-bottom:12px;">
+        <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">A</div><span class="ds-avatar__status ds-avatar__status--online"></span></div>
+        <div class="ds-avatar ds-avatar--md"><div class="ds-avatar__fallback">TF</div><span class="ds-avatar__status ds-avatar__status--busy"></span></div>
+        <div class="ds-avatar ds-avatar--lg"><div class="ds-avatar__fallback">CG</div><span class="ds-avatar__status ds-avatar__status--away"></span></div>
+      </div>
+      <div class="ds-avatar-group" style="margin-bottom:32px;">
+        <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">A</div></div>
+        <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">B</div></div>
+        <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">C</div></div>
+        <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">+3</div></div>
+      </div>
+
+      <!-- Empty State -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Empty State</h3>
+      <div class="ds-card--sunken ds-card">
+        <div class="ds-empty-state">
+          <div class="ds-empty-state__icon"><i data-lucide="inbox" style="width:100%;height:100%;"></i></div>
+          <h3 class="ds-empty-state__title">Nenhuma tarefa pendente</h3>
+          <p class="ds-empty-state__description">Quando agentes criarem novas tarefas, elas aparecerão aqui.</p>
+          <button class="ds-btn ds-btn--primary"><i data-lucide="plus" style="width:16px;height:16px;"></i> Criar tarefa</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== MOTION ========== -->
+    <section class="showroom-section ds-hidden" id="section-motion">
+      <h2 class="ds-heading-2xl">Motion</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Sistema de animação como cidadão de primeira classe. Cada padrão tem propósito.</p>
+
+      <!-- Entry Animations -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Entry Patterns</h3>
+      <div class="ds-grid ds-grid-3" style="margin-bottom:32px;">
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-fade">
+          <h4 class="ds-heading-md">Fade</h4>
+          <p class="ds-caption ds-text-muted">Aparição sutil</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-slide-up">
+          <h4 class="ds-heading-md">Slide Up</h4>
+          <p class="ds-caption ds-text-muted">Entrada de baixo</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-scale">
+          <h4 class="ds-heading-md">Scale</h4>
+          <p class="ds-caption ds-text-muted">Expansão do centro</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-scale-spring">
+          <h4 class="ds-heading-md">Scale Spring</h4>
+          <p class="ds-caption ds-text-muted">Spring com overshoot</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-slide-left">
+          <h4 class="ds-heading-md">Slide Left</h4>
+          <p class="ds-caption ds-text-muted">Entrada da direita</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+        <div class="ds-card showroom-motion-card" data-anim="ds-anim-enter-slide-right">
+          <h4 class="ds-heading-md">Slide Right</h4>
+          <p class="ds-caption ds-text-muted">Entrada da esquerda</p>
+          <button class="ds-btn ds-btn--sm ds-btn--ghost" onclick="replayAnim(this)" style="margin-top:8px;"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay</button>
+        </div>
+      </div>
+
+      <!-- Emphasis Animations -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Emphasis Patterns</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:32px;">
+        <button class="ds-btn" onclick="this.classList.add('ds-anim-pulse');setTimeout(()=>this.classList.remove('ds-anim-pulse'),600)"><i data-lucide="circle-dot" style="width:16px;height:16px;"></i> Pulse</button>
+        <button class="ds-btn" onclick="this.classList.add('ds-anim-shake');setTimeout(()=>this.classList.remove('ds-anim-shake'),600)"><i data-lucide="vibrate" style="width:16px;height:16px;"></i> Shake</button>
+        <button class="ds-btn" onclick="this.classList.add('ds-anim-bounce');setTimeout(()=>this.classList.remove('ds-anim-bounce'),600)"><i data-lucide="arrow-up" style="width:16px;height:16px;"></i> Bounce</button>
+      </div>
+
+      <!-- Stagger -->
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Stagger System</h3>
+      <div style="margin-bottom:16px;">
+        <button class="ds-btn ds-btn--primary ds-btn--sm" onclick="replayStagger()"><i data-lucide="play" style="width:14px;height:14px;"></i> Replay Stagger</button>
+      </div>
+      <div class="ds-grid ds-grid-4 ds-stagger" id="staggerDemo">
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">1</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">2</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">3</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">4</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">5</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">6</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">7</span></div>
+        <div class="ds-card" style="text-align:center;padding:20px;"><span class="ds-heading-lg">8</span></div>
+      </div>
+
+      <!-- Continuous -->
+      <h3 class="ds-heading-lg" style="margin:32px 0 16px;">Contínuas</h3>
+      <div class="ds-inline ds-cluster ds-cluster-lg">
+        <div class="ds-inline ds-inline-sm"><div class="ds-spinner ds-spinner--sm"></div><span class="ds-caption">Spinner SM</span></div>
+        <div class="ds-inline ds-inline-sm"><div class="ds-spinner ds-spinner--md"></div><span class="ds-caption">Spinner MD</span></div>
+        <div class="ds-inline ds-inline-sm"><div class="ds-spinner ds-spinner--lg"></div><span class="ds-caption">Spinner LG</span></div>
+        <div class="ds-inline ds-inline-sm"><span class="ds-anim-thinking ds-body-sm ds-text-muted" style="font-style:italic;">pensando...</span></div>
+        <div class="ds-inline ds-inline-sm"><div class="ds-typing-dots"><span></span><span></span><span></span></div><span class="ds-caption">Typing</span></div>
+      </div>
+    </section>
+
+    <!-- ========== AI MODELS ========== -->
+    <section class="showroom-section ds-hidden" id="section-aimodels">
+      <div class="ds-inline ds-justify-between" style="margin-bottom:24px;">
+        <div>
+          <h2 class="ds-heading-2xl">AI Models Library</h2>
+          <p class="ds-body-md ds-text-muted" style="margin-top:8px;">Single Source of Truth para os modelos suportados, com ícones customizados.</p>
+        </div>
+        <div class="ds-inline ds-inline-md">
+          <span class="ds-badge ds-badge--brand"><span class="ds-badge__dot"></span> 9 Modelos Integrados</span>
+        </div>
+      </div>
+
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Model Badges</h3>
+      <div class="ds-inline ds-cluster ds-cluster-md" style="margin-bottom:32px;">
+        <span class="ds-ai-badge ds-ai-badge--google" title="Gemini 2.5 Pro"><i data-ai-icon="google" class="ds-ai-icon"></i>Gemini 2.5 Pro</span>
+        <span class="ds-ai-badge ds-ai-badge--openai" title="GPT-4o"><i data-ai-icon="openai" class="ds-ai-icon"></i>GPT-4o</span>
+        <span class="ds-ai-badge ds-ai-badge--anthropic" title="Claude 3.5 Sonnet"><i data-ai-icon="anthropic" class="ds-ai-icon"></i>Claude 3.5</span>
+        <span class="ds-ai-badge ds-ai-badge--meta" title="Llama 3"><i data-ai-icon="meta" class="ds-ai-icon"></i>Llama 3</span>
+        <span class="ds-ai-badge ds-ai-badge--mistral" title="Mistral Large"><i data-ai-icon="mistral" class="ds-ai-icon"></i>Mistral Large</span>
+        <span class="ds-ai-badge ds-ai-badge--generic" title="Local Bot"><i data-ai-icon="generic" class="ds-ai-icon"></i>Local Bot</span>
+      </div>
+
+      <h3 class="ds-heading-lg" style="margin-bottom:16px;">Model Catalog (Dynamic)</h3>
+      <div class="ds-grid ds-grid-3 ds-stagger" id="aiModelsGrid">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- ========== AGENT ROLES ========== -->
+    <section class="showroom-section ds-hidden" id="section-agentroles">
+      <div class="ds-inline ds-justify-between" style="margin-bottom:24px;">
+        <div>
+          <h2 class="ds-heading-2xl">Agent Roles Library</h2>
+          <p class="ds-body-md ds-text-muted" style="margin-top:8px;">30 ícones SVG customizados para representar papéis de agentes no sistema.</p>
+        </div>
+        <div class="ds-inline ds-inline-md">
+          <span class="ds-badge ds-badge--violet"><span class="ds-badge__dot"></span> 30 Roles</span>
+        </div>
+      </div>
+
+      <div class="ds-grid ds-grid-5 ds-stagger" id="agentRolesGrid" style="gap:16px;">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- ========== SIMULATOR ========== -->
+    <section class="showroom-section ds-hidden" id="section-simulator">
+      <h2 class="ds-heading-2xl">Dashboard Simulator</h2>
+      <p class="ds-body-md ds-text-muted" style="margin-bottom:24px;">Simulação do painel real usando todos os componentes do DS.</p>
+
+      <!-- Topbar -->
+      <div class="ds-inline ds-justify-between" style="margin-bottom:24px;">
+        <div class="ds-inline ds-inline-md">
+          <nav class="ds-breadcrumb">
+            <a href="#" class="ds-breadcrumb__item">Dashboard</a>
+            <span class="ds-breadcrumb__separator"><i data-lucide="chevron-right" style="width:14px;height:14px;"></i></span>
+            <span class="ds-breadcrumb__item ds-breadcrumb__item--current">Overview</span>
+          </nav>
+        </div>
+        <div class="ds-inline ds-inline-sm">
+          <button class="ds-btn ds-btn--icon ds-btn--ghost"><i data-lucide="bell" style="width:18px;height:18px;"></i></button>
+          <button class="ds-btn ds-btn--icon ds-btn--ghost"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
+          <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">AD</div><span class="ds-avatar__status ds-avatar__status--online"></span></div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="ds-grid ds-grid-4 ds-stagger" style="margin-bottom:24px;">
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Agentes</span>
+          <span class="ds-stat-card__value">5</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--up"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> +1</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Tasks Done</span>
+          <span class="ds-stat-card__value">89</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--up"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> +12</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Tokens/min</span>
+          <span class="ds-stat-card__value">1.2K</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--flat"><i data-lucide="minus" style="width:14px;height:14px;"></i> Estável</span>
+        </div>
+        <div class="ds-stat-card">
+          <span class="ds-stat-card__label">Erros</span>
+          <span class="ds-stat-card__value">2</span>
+          <span class="ds-stat-card__trend ds-stat-card__trend--down"><i data-lucide="trending-down" style="width:14px;height:14px;"></i> -60%</span>
+        </div>
+      </div>
+
+      <!-- Agent List + Activity -->
+      <div class="ds-grid ds-grid-2" style="gap:24px;">
+        <div class="ds-card">
+          <div class="ds-card__header"><h4 class="ds-card__title">Agentes</h4></div>
+          <div class="ds-card__body">
+            <div class="ds-list">
+              <div class="ds-list__item">
+                <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">A</div><span class="ds-avatar__status ds-avatar__status--online"></span></div>
+                <div style="flex:1;">
+                  <div class="ds-body-sm" style="font-weight:600;margin-bottom:4px;">Aria</div>
+                  <div class="ds-inline ds-inline-sm">
+                    <span class="ds-caption ds-text-muted">Principal</span>
+                    <span class="ds-ai-badge ds-ai-badge--google" style="padding:2px 6px; font-size:10px;"><i data-ai-icon="google" class="ds-ai-icon" style="width:12px;height:12px;"></i>Gemini 2.5 Pro</span>
+                  </div>
+                </div>
+                <span class="ds-badge ds-badge--success"><span class="ds-badge__dot"></span> Online</span>
+              </div>
+              <div class="ds-list__item">
+                <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">TF</div><span class="ds-avatar__status ds-avatar__status--busy"></span></div>
+                <div style="flex:1;">
+                  <div class="ds-body-sm" style="font-weight:600;margin-bottom:4px;">TaskForge</div>
+                  <div class="ds-inline ds-inline-sm">
+                    <span class="ds-caption ds-text-muted">Manager</span>
+                    <span class="ds-ai-badge ds-ai-badge--openai" style="padding:2px 6px; font-size:10px;"><i data-ai-icon="openai" class="ds-ai-icon" style="width:12px;height:12px;"></i>GPT-4o</span>
+                  </div>
+                </div>
+                <span class="ds-badge ds-badge--warning"><span class="ds-badge__dot"></span> Busy</span>
+              </div>
+              <div class="ds-list__item">
+                <div class="ds-avatar ds-avatar--sm"><div class="ds-avatar__fallback">CG</div><span class="ds-avatar__status ds-avatar__status--online"></span></div>
+                <div style="flex:1;">
+                  <div class="ds-body-sm" style="font-weight:600;margin-bottom:4px;">CodeGen</div>
+                  <div class="ds-inline ds-inline-sm">
+                    <span class="ds-caption ds-text-muted">Worker</span>
+                    <span class="ds-ai-badge ds-ai-badge--anthropic" style="padding:2px 6px; font-size:10px;"><i data-ai-icon="anthropic" class="ds-ai-icon" style="width:12px;height:12px;"></i>Claude 3.5</span>
+                  </div>
+                </div>
+                <span class="ds-badge ds-badge--success"><span class="ds-badge__dot"></span> Online</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card__header"><h4 class="ds-card__title">Atividade Recente</h4></div>
+          <div class="ds-card__body">
+            <div class="ds-list">
+              <div class="ds-list__item">
+                <i data-lucide="check-circle" style="width:18px;height:18px;color:var(--ds-feedback-success);flex-shrink:0;"></i>
+                <div style="flex:1;">
+                  <div class="ds-body-sm">Refatorar módulo de auth</div>
+                  <div class="ds-caption ds-text-muted">CodeGen · 2min atrás</div>
+                </div>
+              </div>
+              <div class="ds-list__item">
+                <i data-lucide="loader" style="width:18px;height:18px;color:var(--ds-feedback-warning);flex-shrink:0;" class="ds-anim-thinking"></i>
+                <div style="flex:1;">
+                  <div class="ds-body-sm">Analisar dependências do projeto</div>
+                  <div class="ds-caption ds-text-muted">TaskForge · em progresso</div>
+                </div>
+              </div>
+              <div class="ds-list__item">
+                <i data-lucide="x-circle" style="width:18px;height:18px;color:var(--ds-feedback-danger);flex-shrink:0;"></i>
+                <div style="flex:1;">
+                  <div class="ds-body-sm">Deploy para staging</div>
+                  <div class="ds-caption ds-text-muted">DevOps · falhou · 15min atrás</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== MODAL ===== -->
+  <div class="ds-modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="ds-modal" onclick="event.stopPropagation()">
+      <div class="ds-modal__header">
+        <h3 class="ds-modal__title">Confirmar Ação</h3>
+        <button class="ds-modal__close" onclick="closeModal()"><i data-lucide="x" style="width:20px;height:20px;"></i></button>
+      </div>
+      <div class="ds-modal__body">
+        <p class="ds-body-md ds-text-muted">Tem certeza que deseja executar esta ação? Esta operação não pode ser desfeita.</p>
+        <div class="ds-alert ds-alert--warning" style="margin-top:16px;">
+          <div class="ds-alert__icon"><i data-lucide="alert-triangle"></i></div>
+          <div class="ds-alert__body">
+            <div class="ds-alert__title">Atenção</div>
+            <div class="ds-alert__message">Todos os dados associados serão permanentemente removidos.</div>
+          </div>
+        </div>
+      </div>
+      <div class="ds-modal__footer">
+        <button class="ds-btn" onclick="closeModal()">Cancelar</button>
+        <button class="ds-btn ds-btn--danger" onclick="closeModal()"><i data-lucide="trash-2" style="width:16px;height:16px;"></i> Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DRAWER ===== -->
+  <div class="ds-drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+  <div class="ds-drawer ds-drawer--right" id="drawer">
+    <div class="ds-drawer__header">
+      <h3 class="ds-drawer__title">Detalhes do Agente</h3>
+      <button class="ds-btn ds-btn--icon ds-btn--ghost" onclick="closeDrawer()"><i data-lucide="x" style="width:18px;height:18px;"></i></button>
+    </div>
+    <div class="ds-stack ds-stack-md">
+      <div class="ds-field">
+        <label class="ds-field__label">Nome</label>
+        <input class="ds-input" value="Aria">
+      </div>
+      <div class="ds-field">
+        <label class="ds-field__label">Modelo</label>
+        <select class="ds-select">
+          <option>Gemini 2.5 Pro</option>
+          <option>Gemini 2.5 Flash</option>
+        </select>
+      </div>
+      <div class="ds-field">
+        <label class="ds-field__label">System Prompt</label>
+        <textarea class="ds-textarea" rows="5">Você é Aria, a IA coordenadora principal...</textarea>
+      </div>
+      <label class="ds-switch">
+        <input type="checkbox" class="ds-switch__input" checked>
+        <span class="ds-switch__track"><span class="ds-switch__thumb"></span></span>
+        <span class="ds-switch__label">Auto-approve</span>
+      </label>
+      <div class="ds-inline ds-justify-end" style="margin-top:16px;">
+        <button class="ds-btn" onclick="closeDrawer()">Cancelar</button>
+        <button class="ds-btn ds-btn--primary" onclick="closeDrawer()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST CONTAINER ===== -->
+  <div class="ds-toast-container ds-toast-container--top-right" id="toastContainer"></div>
+
+  <script src="ai-icons.js"></script>
+  <script src="ai-models.js"></script>
+  <script src="agent-icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+/* Regras específicas do dashboard — o visual em si vem de tokens/foundations/components/motion (design-system/). */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ds-surface-base);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-family-body);
+  font-size: var(--p-font-size-sm);
+}
+
+.hidden { display: none !important; }
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-logo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--p-space-6) var(--p-space-8);
+  max-width: 1180px;
+}
+
+.app-topbar {
+  display: flex;
+  gap: var(--p-space-2-5);
+  margin-bottom: var(--p-space-5);
+  flex-wrap: wrap;
+}
+
+.app-conn-row { padding: 0 var(--p-space-1); }
+
+.app-conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ds-feedback-danger);
+  flex-shrink: 0;
+}
+.app-conn-dot.is-on { background: var(--ds-feedback-success); }
+
+.app-view { animation: ds-enter-slide-up var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+
+/* Arvore de hierarquia */
+.tree { line-height: 2.2; }
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-2);
+  cursor: pointer;
+  padding: var(--p-space-1) 0;
+  border-radius: var(--ds-radius-sm);
+}
+.tree-node:hover { color: var(--ds-action-primary); }
+.tree-indent { color: var(--ds-text-disabled); font-family: var(--ds-font-family-code); white-space: pre; }
+
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-2-5);
+  padding: var(--p-space-2-5) 0;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+.team-row:last-child { border-bottom: none; }
+
+/* Feed ao vivo */
+.live-feed { display: flex; flex-direction: column; gap: var(--p-space-3); }
+
+.bubble {
+  background: var(--ds-surface-neu-base);
+  box-shadow: var(--ds-shadow-outset-xs);
+  border-radius: var(--ds-radius-lg);
+  padding: var(--p-space-3) var(--p-space-4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble-who { font-weight: var(--p-font-weight-semibold); margin-bottom: var(--p-space-1); }
+.bubble-system { color: var(--ds-text-muted); font-size: var(--ds-caption-size); box-shadow: none; border: 1px dashed var(--ds-border-subtle); }
+.bubble-error { border: 1px solid var(--ds-feedback-danger); color: var(--ds-feedback-danger-text); }
+
+.bubble-toolchip { margin: var(--p-space-1) var(--p-space-1) 0 0; color: var(--ds-feedback-warning-text); }
+
+.cursor {
+  display: inline-block;
+  width: 6px; height: 13px;
+  background: var(--ds-action-primary);
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.thinking-label { color: var(--ds-text-muted); font-style: italic; }
+
+/* Detalhe do agente */
+.app-doc {
+  background: var(--ds-surface-sunken);
+  box-shadow: var(--ds-shadow-inset-sm);
+  border-radius: var(--ds-radius-md);
+  padding: var(--p-space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-caption-size);
+  color: var(--ds-text-secondary);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.conv-msg { padding: var(--p-space-2) 0; border-bottom: 1px solid var(--ds-border-subtle); }
+.conv-msg:last-child { border-bottom: none; }
+
+/* Configuracoes */
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--p-space-4);
+  padding: var(--p-space-3) 0;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-row .label b { display: block; }
+
+/* Confirmacoes pendentes */
+.confirm-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: var(--ds-feedback-warning-bg);
+  border-bottom: 2px solid var(--ds-feedback-warning);
+  padding: var(--p-space-3) var(--p-space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-2-5);
+  flex-wrap: wrap;
+}
+.confirm-item { display: flex; gap: var(--p-space-2-5); align-items: center; flex-wrap: wrap; }

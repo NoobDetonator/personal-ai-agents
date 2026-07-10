@@ -1,0 +1,293 @@
+/* ============================================================================
+   MOTION LANGUAGE — NEUMORPHIC DESIGN SYSTEM
+   Cidadão de primeira classe. Cada animação tem propósito.
+   ============================================================================ */
+
+/* ---------- Entry Patterns ---------- */
+@keyframes ds-enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ds-enter-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ds-enter-slide-down {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ds-enter-slide-left {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ds-enter-slide-right {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ds-enter-scale {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ds-enter-scale-spring {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ---------- Exit Patterns ---------- */
+@keyframes ds-exit-fade {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes ds-exit-slide-down {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(16px); }
+}
+
+@keyframes ds-exit-slide-up {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-16px); }
+}
+
+@keyframes ds-exit-scale {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.92); }
+}
+
+/* ---------- Emphasis Patterns ---------- */
+@keyframes ds-emphasis-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+
+@keyframes ds-emphasis-shake {
+  0%, 100%           { transform: translateX(0); }
+  10%, 30%, 50%, 70% { transform: translateX(-4px); }
+  20%, 40%, 60%      { transform: translateX(4px); }
+  80%                { transform: translateX(2px); }
+  90%                { transform: translateX(-2px); }
+}
+
+@keyframes ds-emphasis-bounce {
+  0%, 100% { transform: translateY(0); }
+  40%      { transform: translateY(-8px); }
+  60%      { transform: translateY(-4px); }
+}
+
+@keyframes ds-emphasis-glow {
+  0%, 100% { box-shadow: var(--ds-shadow-outset-md); }
+  50%      { box-shadow: var(--ds-shadow-outset-lg), 0 0 20px var(--ds-action-primary-subtle); }
+}
+
+/* ---------- Toast Patterns ---------- */
+@keyframes ds-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes ds-toast-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+  }
+}
+
+@keyframes ds-toast-timer {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+/* ---------- Skeleton Shimmer ---------- */
+@keyframes ds-skeleton-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ---------- Spinner ---------- */
+/* (defined in foundations.css as ds-spin) */
+
+/* ---------- Thinking / Pulse ---------- */
+@keyframes ds-thinking {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+/* ---------- Typing indicator dots ---------- */
+@keyframes ds-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30%           { transform: translateY(-6px); }
+}
+
+/* ---------- Progress indeterminate ---------- */
+@keyframes ds-progress-indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.4); }
+  50%  { transform: translateX(0%) scaleX(0.6); }
+  100% { transform: translateX(100%) scaleX(0.4); }
+}
+
+/* ---------- Cursor blink ---------- */
+@keyframes ds-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+/* ---------- Status dot pulse ---------- */
+@keyframes ds-status-pulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+
+/* ============================================================================
+   ANIMATION UTILITY CLASSES
+   Apply as `.ds-anim-{name}` or via stagger system.
+   ============================================================================ */
+
+/* Entries */
+.ds-anim-enter-fade       { animation: ds-enter-fade var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+.ds-anim-enter-slide-up   { animation: ds-enter-slide-up var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+.ds-anim-enter-slide-down { animation: ds-enter-slide-down var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+.ds-anim-enter-slide-left { animation: ds-enter-slide-left var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+.ds-anim-enter-slide-right{ animation: ds-enter-slide-right var(--ds-motion-normal) var(--p-ease-decelerate) both; }
+.ds-anim-enter-scale      { animation: ds-enter-scale var(--ds-motion-normal) var(--p-ease-spring-soft) both; }
+.ds-anim-enter-scale-spring { animation: ds-enter-scale-spring var(--ds-motion-slow) var(--p-ease-spring-bouncy) both; }
+
+/* Exits */
+.ds-anim-exit-fade        { animation: ds-exit-fade var(--ds-motion-fast) var(--p-ease-accelerate) both; }
+.ds-anim-exit-slide-down  { animation: ds-exit-slide-down var(--ds-motion-fast) var(--p-ease-accelerate) both; }
+.ds-anim-exit-scale       { animation: ds-exit-scale var(--ds-motion-fast) var(--p-ease-accelerate) both; }
+
+/* Emphasis (use sparingly) */
+.ds-anim-pulse  { animation: ds-emphasis-pulse 0.5s var(--p-ease-in-out); }
+.ds-anim-shake  { animation: ds-emphasis-shake 0.5s var(--p-ease-in-out); }
+.ds-anim-bounce { animation: ds-emphasis-bounce 0.5s var(--p-ease-spring-soft); }
+.ds-anim-glow   { animation: ds-emphasis-glow 1.5s var(--p-ease-in-out) infinite; }
+
+/* Continuous */
+.ds-anim-thinking { animation: ds-thinking 1.4s ease-in-out infinite; }
+.ds-anim-blink    { animation: ds-blink 1s step-end infinite; }
+.ds-anim-status-pulse { animation: ds-status-pulse 2s ease-in-out infinite; }
+
+/* Typing dots */
+.ds-typing-dots { display: inline-flex; gap: 3px; }
+.ds-typing-dots span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--ds-text-muted);
+  animation: ds-typing-bounce 1.2s ease-in-out infinite;
+}
+.ds-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.ds-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+
+/* ============================================================================
+   STAGGER SYSTEM
+   Add `.ds-stagger` to parent, each direct child gets increasing delay.
+   ============================================================================ */
+.ds-stagger > * {
+  animation: ds-enter-slide-up var(--ds-motion-normal) var(--p-ease-decelerate) both;
+}
+
+.ds-stagger > *:nth-child(1)  { animation-delay: 0ms; }
+.ds-stagger > *:nth-child(2)  { animation-delay: 40ms; }
+.ds-stagger > *:nth-child(3)  { animation-delay: 80ms; }
+.ds-stagger > *:nth-child(4)  { animation-delay: 120ms; }
+.ds-stagger > *:nth-child(5)  { animation-delay: 160ms; }
+.ds-stagger > *:nth-child(6)  { animation-delay: 200ms; }
+.ds-stagger > *:nth-child(7)  { animation-delay: 240ms; }
+.ds-stagger > *:nth-child(8)  { animation-delay: 280ms; }
+.ds-stagger > *:nth-child(9)  { animation-delay: 320ms; }
+.ds-stagger > *:nth-child(10) { animation-delay: 360ms; }
+.ds-stagger > *:nth-child(11) { animation-delay: 400ms; }
+.ds-stagger > *:nth-child(12) { animation-delay: 440ms; }
+
+/* Faster stagger variant */
+.ds-stagger-fast > * {
+  animation: ds-enter-fade var(--ds-motion-fast) var(--p-ease-decelerate) both;
+}
+.ds-stagger-fast > *:nth-child(1)  { animation-delay: 0ms; }
+.ds-stagger-fast > *:nth-child(2)  { animation-delay: 25ms; }
+.ds-stagger-fast > *:nth-child(3)  { animation-delay: 50ms; }
+.ds-stagger-fast > *:nth-child(4)  { animation-delay: 75ms; }
+.ds-stagger-fast > *:nth-child(5)  { animation-delay: 100ms; }
+.ds-stagger-fast > *:nth-child(6)  { animation-delay: 125ms; }
+.ds-stagger-fast > *:nth-child(7)  { animation-delay: 150ms; }
+.ds-stagger-fast > *:nth-child(8)  { animation-delay: 175ms; }
+.ds-stagger-fast > *:nth-child(9)  { animation-delay: 200ms; }
+.ds-stagger-fast > *:nth-child(10) { animation-delay: 225ms; }
+.ds-stagger-fast > *:nth-child(11) { animation-delay: 250ms; }
+.ds-stagger-fast > *:nth-child(12) { animation-delay: 275ms; }
+
+/* Scale stagger variant */
+.ds-stagger-scale > * {
+  animation: ds-enter-scale var(--ds-motion-normal) var(--p-ease-spring-soft) both;
+}
+.ds-stagger-scale > *:nth-child(1)  { animation-delay: 0ms; }
+.ds-stagger-scale > *:nth-child(2)  { animation-delay: 50ms; }
+.ds-stagger-scale > *:nth-child(3)  { animation-delay: 100ms; }
+.ds-stagger-scale > *:nth-child(4)  { animation-delay: 150ms; }
+.ds-stagger-scale > *:nth-child(5)  { animation-delay: 200ms; }
+.ds-stagger-scale > *:nth-child(6)  { animation-delay: 250ms; }
+.ds-stagger-scale > *:nth-child(7)  { animation-delay: 300ms; }
+.ds-stagger-scale > *:nth-child(8)  { animation-delay: 350ms; }
+
+
+/* ============================================================================
+   REDUCED MOTION OVERRIDES
+   CRITICAL: Every animation is degraded to simple fade or removed entirely.
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .ds-anim-enter-fade,
+  .ds-anim-enter-slide-up,
+  .ds-anim-enter-slide-down,
+  .ds-anim-enter-slide-left,
+  .ds-anim-enter-slide-right,
+  .ds-anim-enter-scale,
+  .ds-anim-enter-scale-spring {
+    animation: ds-enter-fade 0.01ms both !important;
+  }
+
+  .ds-anim-exit-fade,
+  .ds-anim-exit-slide-down,
+  .ds-anim-exit-scale {
+    animation: ds-exit-fade 0.01ms both !important;
+  }
+
+  .ds-anim-pulse,
+  .ds-anim-shake,
+  .ds-anim-bounce,
+  .ds-anim-glow,
+  .ds-anim-status-pulse {
+    animation: none !important;
+  }
+
+  .ds-stagger > *,
+  .ds-stagger-fast > *,
+  .ds-stagger-scale > * {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .ds-toast {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
