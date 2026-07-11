@@ -6,6 +6,7 @@ export interface SkillMeta {
   id: string;          // folder name (slug)
   name: string;        // from frontmatter (falls back to id)
   description: string; // from frontmatter
+  protected: boolean;  // frontmatter `protected: true` — skill interna, imutavel via updateSkill
   dir: string;         // absolute path to the skill folder
   filePath: string;    // absolute path to SKILL.md
 }
@@ -84,6 +85,7 @@ export function loadSkills(): void {
         id: entry.name,
         name: data.name || entry.name,
         description: data.description || '',
+        protected: data.protected === 'true',
         dir,
         filePath,
       });
@@ -168,6 +170,11 @@ export function updateSkillFiles(idOrName: string, updates: { description?: stri
   const meta = getSkillMeta(idOrName);
   if (!meta) {
     throw new Error(`Skill "${idOrName}" nao encontrada.`);
+  }
+  if (meta.protected) {
+    throw new Error(
+      `Skill "${meta.id}" e interna e protegida contra alteracao. Proponha a melhoria ao usuario em vez de alterar.`,
+    );
   }
 
   const current = fs.readFileSync(meta.filePath, 'utf-8');

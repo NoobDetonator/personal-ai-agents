@@ -1,6 +1,7 @@
 ---
 name: system-prompter
 description: Como escrever souls, memorias iniciais e prompts de delegacao eficazes ao criar ou configurar agentes. Use SEMPRE antes de createAgent, configureAgent ou de reescrever a soul de um agente.
+protected: true
 ---
 
 # System Prompter — Souls e Prompts para Novos Agentes
@@ -97,4 +98,4 @@ RIGHT: fazer sozinha, ou 1 temporario especialista quando ha ganho claro.
 
 - As Regras de Operacao do sistema (anti-fabricacao, verificar antes de reportar, pt-BR) ja entram automaticamente em todo agente — nao as repita nem as contradiga na soul.
 - Agentes temporarios: delete ao final do trabalho (ou o /gc cobra depois).
-- Ao descobrir um padrao de prompt que funciona bem, melhore esta skill com updateSkill.
+- Esta skill e protegida contra alteracao automatica. Ao descobrir um padrao de prompt que funciona bem, proponha a melhoria ao usuario.

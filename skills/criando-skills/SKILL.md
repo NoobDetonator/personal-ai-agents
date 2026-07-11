@@ -1,6 +1,7 @@
 ---
 name: criando-skills
 description: Como escrever skills de alta qualidade. Use antes de criar ou melhorar qualquer skill com createSkill/updateSkill.
+protected: true
 ---
 
 # Criando Skills de Qualidade

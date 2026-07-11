@@ -5,7 +5,9 @@ import {
   readSkillContent,
   createSkillFiles,
   updateSkillFiles,
+  getSkillMeta,
 } from './loader.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 export const listSkillsTool = tool({
   description: 'Listar todas as skills (habilidades documentadas) disponiveis',
@@ -76,6 +78,18 @@ export const updateSkillTool = tool({
   }),
   execute: async ({ name, instructions, description }) => {
     try {
+      const existing = getSkillMeta(name);
+      if (existing && !existing.protected) {
+        // Skills condicionam o comportamento de TODOS os agentes futuros;
+        // alteracao permanente exige aprovacao humana, sem "sempre permitir"
+        const result = await askConfirmation(
+          `Um agente quer reescrever a skill "${existing.id}". Permitir?`,
+          { allowAlways: false },
+        );
+        if (result.answer !== 'yes') {
+          return { error: 'Alteracao da skill negada pelo usuario.' };
+        }
+      }
       const meta = updateSkillFiles(name, { instructions, description });
       return { success: true, id: meta.id, path: meta.filePath };
     } catch (error) {

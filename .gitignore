@@ -22,9 +22,11 @@ workspace/
 *.sqlite
 *.sqlite3
 
-# Agentes criados durante o uso. Somente a soul padrão da Aria é versionada.
+# Agentes criados durante o uso. Somente a soul padrão da Aria é versionada;
+# memórias, notas diárias e qualquer outro estado pessoal ficam locais.
 agents/*
 !agents/aria/
+agents/aria/*
 !agents/aria/soul.md
 
 # Caches e temporários locais

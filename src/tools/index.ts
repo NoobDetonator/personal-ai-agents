@@ -27,10 +27,18 @@ export function buildToolSet(
   const agentMgmtTools = createAgentManagementTools(agentId, onAgentCreated);
   const conversationMgmtTools = createConversationMgmtTools(agentId);
 
-  // Leaders (principal and managers) get the company board + delegation tools
+  // Leaders (principal and managers) get the company board + delegation tools.
+  // Skill authoring is also leader-only: skills condition every future agent,
+  // so workers (often temporary, fed with external content) cannot write them.
   const role = getConfig().agents[agentId]?.role ?? 'worker';
-  const leaderTools = role === 'principal' || role === 'manager'
-    ? { ...createTaskTools(agentId), ...createGroupTools(agentId) }
+  const isLeader = role === 'principal' || role === 'manager';
+  const leaderTools = isLeader
+    ? {
+        ...createTaskTools(agentId),
+        ...createGroupTools(agentId),
+        createSkill: createSkillTool,
+        updateSkill: updateSkillTool,
+      }
     : {};
 
   return {
@@ -57,11 +65,9 @@ export function buildToolSet(
     listSchedules: schedulingTools.listSchedules,
     deleteSchedule: schedulingTools.deleteSchedule,
 
-    // Skills
+    // Skills (leitura para todos; criacao/alteracao entra via leaderTools)
     listSkills: listSkillsTool,
     useSkill: useSkillTool,
-    createSkill: createSkillTool,
-    updateSkill: updateSkillTool,
 
     // Memory
     readMemory: memoryTools.readMemory,
