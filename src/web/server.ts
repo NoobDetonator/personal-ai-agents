@@ -18,6 +18,8 @@ import {
 import { refreshHeartbeat } from '../heartbeat/engine.js';
 import { onBusEvent, emitBus, type BusEvent } from './bus.js';
 import { getSessionUsage } from '../agents/usage.js';
+import { listProfiles } from '../agents/prompt-composer.js';
+import { resolveAgentProfileProvenance } from '../agents/profile-provenance.js';
 import { getMcpStatus } from '../mcp/manager.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
@@ -172,6 +174,7 @@ function apiState(): unknown {
      FROM messages WHERE created_at >= date('now')`
   ).get() as { inp: number | null; outp: number | null };
 
+  const profiles = listProfiles();
   const agents = Object.entries(config.agents).map(([id, cfg]) => ({
     id,
     name: cfg.name,
@@ -184,6 +187,7 @@ function apiState(): unknown {
     enabled: cfg.enabled,
     provider: cfg.provider ?? config.ai.provider,
     model: cfg.model ?? config.ai.model,
+    profileProvenance: resolveAgentProfileProvenance(cfg, profiles),
     tokens: tokensByAgent.get(id) ?? { input: 0, output: 0 },
   }));
 
@@ -232,6 +236,7 @@ function apiAgent(id: string): unknown | null {
   return {
     id,
     ...cfg,
+    profileProvenance: resolveAgentProfileProvenance(cfg),
     soul: readSoul(id),
     memory: readMemory(id),
     dailyNote: readDailyNote(id),

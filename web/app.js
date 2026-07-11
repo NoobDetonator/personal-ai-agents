@@ -30,6 +30,93 @@ function roleBadge(role) {
   return `<span class="ds-badge ds-badge--${ROLE_BADGE[role] || 'brand'}">${esc(role)}</span>`;
 }
 
+const PROFILE_STATUS = {
+  manual: {
+    label: 'Soul manual',
+    shortLabel: 'soul manual',
+    variant: 'info',
+    icon: 'pen-line',
+    description: 'Soul definida manualmente; não há vínculo com a biblioteca de perfis.',
+  },
+  current: {
+    label: 'Perfil sincronizado',
+    shortLabel: 'perfil',
+    variant: 'success',
+    icon: 'badge-check',
+    description: 'A revisão aplicada coincide com o perfil atual da biblioteca.',
+  },
+  outdated: {
+    label: 'Perfil desatualizado',
+    shortLabel: 'perfil desatualizado',
+    variant: 'warning',
+    icon: 'refresh-cw',
+    description: 'O perfil da biblioteca mudou depois da composição desta soul.',
+  },
+  missing: {
+    label: 'Perfil ausente',
+    shortLabel: 'perfil ausente',
+    variant: 'danger',
+    icon: 'file-question',
+    description: 'O perfil registrado não existe mais na biblioteca.',
+  },
+  untracked: {
+    label: 'Revisão não registrada',
+    shortLabel: 'perfil sem revisão',
+    variant: 'info',
+    icon: 'fingerprint',
+    description: 'O perfil está registrado, mas a revisão aplicada não foi salva.',
+  },
+};
+
+function profileStatusMeta(provenance) {
+  return PROFILE_STATUS[provenance?.status] || PROFILE_STATUS.manual;
+}
+
+function profileBadge(provenance) {
+  const meta = profileStatusMeta(provenance);
+  const name = provenance?.profileTitle || provenance?.profileId;
+  const text = name ? `${meta.shortLabel}: ${name}` : meta.shortLabel;
+  return `<span class="ds-badge ds-badge--${meta.variant}" data-profile-status="${esc(provenance?.status || 'manual')}" title="${esc(meta.description)}">${esc(text)}</span>`;
+}
+
+function profileProvenanceCard(provenance) {
+  const p = provenance || { source: 'manual', status: 'manual' };
+  const meta = profileStatusMeta(p);
+  const source = p.source === 'library' ? 'Biblioteca de perfis' : 'Definição manual';
+  const profile = p.profileTitle
+    ? `${p.profileTitle} (${p.profileId})`
+    : p.profileId || 'Nenhum';
+  const applied = p.appliedRevision || '&mdash;';
+  const current = p.currentRevision || '&mdash;';
+  const file = p.profileFile
+    ? `<div class="profile-origin-item profile-origin-item--wide"><span>Arquivo de origem</span><code class="ds-code">${esc(p.profileFile)}</code></div>`
+    : '';
+
+  return `
+    <div class="ds-card profile-origin-card" style="margin-bottom:16px;" data-profile-status="${esc(p.status)}">
+      <div class="ds-card__header">
+        <h3 class="ds-card__title">Proveniência da soul</h3>
+        ${profileBadge(p)}
+      </div>
+      <div class="ds-card__body">
+        <div class="profile-origin-summary profile-origin--${esc(p.status)}">
+          <i data-lucide="${meta.icon}" class="ds-icon ds-icon--md"></i>
+          <div>
+            <b>${esc(meta.label)}</b>
+            <p class="ds-caption">${esc(meta.description)}</p>
+          </div>
+        </div>
+        <div class="profile-origin-grid">
+          <div class="profile-origin-item"><span>Origem</span><b>${esc(source)}</b></div>
+          <div class="profile-origin-item"><span>Perfil</span><b>${esc(profile)}</b></div>
+          <div class="profile-origin-item"><span>Revisão aplicada</span><code class="ds-code">${applied === '&mdash;' ? applied : esc(applied)}</code></div>
+          <div class="profile-origin-item"><span>Revisão atual</span><code class="ds-code">${current === '&mdash;' ? current : esc(current)}</code></div>
+          ${file}
+        </div>
+      </div>
+    </div>`;
+}
+
 /** Mapeia um agente para um dos 30 icones de papel do design system. */
 function agentIconFor(agent) {
   const id = (agent.id || '').toLowerCase();
@@ -168,6 +255,7 @@ async function renderOverview() {
       agent.team ? `<span class="ds-badge ds-badge--success">${esc(agent.team)}</span>` : '',
       agent.temporary ? `<span class="ds-badge ds-badge--warning">temp</span>` : '',
       agent.fast ? `<span class="ds-badge">⚡fast</span>` : '',
+      profileBadge(agent.profileProvenance),
     ].join(' ');
     lines.push(`
       <div class="tree-node" role="link" tabindex="0" data-agent-id="${esc(agent.id)}">
@@ -235,6 +323,7 @@ async function renderAgents() {
           ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''}
           ${a.temporary ? `<span class="ds-badge ds-badge--warning">temp</span>` : ''}
           ${a.fast ? `<span class="ds-badge">⚡fast</span>` : ''}
+          ${profileBadge(a.profileProvenance)}
         </div>
         <div class="ds-inline ds-cluster ds-cluster-sm" style="margin-top:10px;">
           ${aiBadge(a.provider, a.model)}
@@ -276,7 +365,7 @@ async function renderAgentDetail(id) {
   $('#view-agent-detail').innerHTML = `
     <a class="ds-btn ds-btn--ghost" href="#/agents"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> agentes</a>
     <h2 class="ds-heading-2xl" style="margin:12px 0 16px;">
-      ${esc(a.name)} ${roleBadge(a.role)} ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''}
+      ${esc(a.name)} ${roleBadge(a.role)} ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''} ${profileBadge(a.profileProvenance)}
     </h2>
 
     <div class="ds-card" style="margin-bottom:16px;">
@@ -290,6 +379,8 @@ async function renderAgentDetail(id) {
         </div>
       </div>
     </div>
+
+    ${profileProvenanceCard(a.profileProvenance)}
 
     <div class="ds-card" style="margin-bottom:16px;">
       <div class="ds-card__header"><h3 class="ds-card__title">Soul (personalidade)</h3></div>

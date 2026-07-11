@@ -8,7 +8,7 @@ Perfil do usuário, memória e notas são enviados ao modelo como dados em uma m
 
 ## Perfis e souls
 
-`createAgent`, `configureAgent` e o comando `/novo` aceitam `profileId`. O compositor gera uma soul de até 150 palavras, registra o id e a revisão do perfil e limita a missão a 30 palavras. Edição manual da própria soul exige confirmação humana e remove a proveniência do perfil.
+`createAgent`, `configureAgent` e o comando `/novo` aceitam `profileId`. O compositor gera uma soul de até 150 palavras, registra o id e a revisão do perfil e limita a missão a 30 palavras. Edição manual da própria soul exige confirmação humana e remove a proveniência do perfil. O painel compara a revisão aplicada com a revisão atual da biblioteca e sinaliza perfis sincronizados, desatualizados, ausentes, sem revisão ou souls manuais.
 
 ## Skills
 

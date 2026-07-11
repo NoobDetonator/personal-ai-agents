@@ -25,6 +25,7 @@ body {
 
 .app-main {
   flex: 1;
+  min-width: 0;
   padding: var(--p-space-6) var(--p-space-8);
   max-width: 1180px;
 }
@@ -110,6 +111,73 @@ body {
   color: var(--ds-text-secondary);
   max-height: 300px;
   overflow-y: auto;
+}
+
+.profile-origin-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--p-space-3);
+  padding: var(--p-space-3);
+  margin-bottom: var(--p-space-4);
+  border-left: 3px solid var(--ds-feedback-info);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-sunken);
+}
+.profile-origin-summary p { margin: var(--p-space-1) 0 0; }
+.profile-origin--current { border-left-color: var(--ds-feedback-success); }
+.profile-origin--outdated { border-left-color: var(--ds-feedback-warning); }
+.profile-origin--missing { border-left-color: var(--ds-feedback-danger); }
+.profile-origin--untracked,
+.profile-origin--manual { border-left-color: var(--ds-feedback-info); }
+
+.profile-origin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--p-space-3);
+}
+.profile-origin-item {
+  min-width: 0;
+  padding: var(--p-space-3);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+}
+.profile-origin-item > span {
+  display: block;
+  margin-bottom: var(--p-space-1);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-caption-size);
+}
+.profile-origin-item > b,
+.profile-origin-item > code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.profile-origin-item--wide { grid-column: 1 / -1; }
+
+@media (max-width: 700px) {
+  .ds-sidebar {
+    width: 64px;
+    flex: 0 0 64px;
+    padding: var(--p-space-3) var(--p-space-2);
+  }
+  .ds-sidebar__logo { justify-content: center; padding-inline: 0; }
+  .ds-sidebar__logo-text,
+  #conn-status,
+  .ds-switch__label { display: none; }
+  .ds-sidebar__item {
+    justify-content: center;
+    gap: 0;
+    padding-inline: var(--p-space-2);
+    font-size: 0;
+  }
+  .app-main { padding: var(--p-space-4); }
+  .app-topbar .ds-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .profile-origin-grid { grid-template-columns: 1fr; }
+  .profile-origin-item--wide { grid-column: auto; }
 }
 
 .conv-msg { padding: var(--p-space-2) 0; border-bottom: 1px solid var(--ds-border-subtle); }
