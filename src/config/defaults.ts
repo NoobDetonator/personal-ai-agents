@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type AgentRole = 'principal' | 'manager' | 'worker';
 
 export interface AgentConfig {
@@ -84,6 +86,96 @@ export interface AppConfig {
   };
   agents: Record<string, AgentConfig>;
 }
+
+// Valida a config carregada do disco. Espelha AppConfig; campos extras sao
+// tolerados (validacao apenas), mas valores com tipo errado rejeitam o load.
+const AGENT_SCHEMA = z.object({
+  name: z.string(),
+  description: z.string(),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  enabled: z.boolean(),
+  role: z.enum(['principal', 'manager', 'worker']),
+  parent: z.string().nullable(),
+  team: z.string().nullable(),
+  temporary: z.boolean().optional(),
+  thinking: z.boolean().optional(),
+});
+
+export const CONFIG_SCHEMA = z.object({
+  version: z.number().int().positive(),
+  ai: z.object({
+    provider: z.enum(['deepseek', 'zai', 'openai', 'anthropic', 'google', 'nvidia']),
+    model: z.string(),
+    maxOutputTokens: z.number().int().positive(),
+    temperature: z.number().min(0).max(2),
+  }),
+  defaultAgent: z.string(),
+  search: z.object({
+    maxResults: z.number().int().positive(),
+    braveSearch: z.object({ enabled: z.boolean() }),
+  }),
+  fileOps: z.object({
+    allowedPaths: z.array(z.string()),
+    blockedExtensions: z.array(z.string()),
+    maxFileSizeKB: z.number().positive(),
+    confirmDestructive: z.boolean(),
+  }),
+  shell: z.object({
+    mode: z.enum(['confirm', 'auto', 'off']),
+    allowlist: z.array(z.string()),
+    timeoutSec: z.number().positive(),
+  }),
+  memory: z.object({
+    nudgeEvery: z.number().int().positive(),
+    recall: z.boolean(),
+  }),
+  delegation: z.object({
+    timeoutSec: z.number().positive(),
+    concurrency: z.number().int().positive(),
+  }),
+  user: z.object({ onboarded: z.boolean() }),
+  obsidian: z.object({ vaultPath: z.string().nullable() }),
+  heartbeat: z.object({
+    enabled: z.boolean(),
+    intervalMin: z.number().positive(),
+    agent: z.string(),
+    prompt: z.string(),
+  }),
+  web: z.object({
+    enabled: z.boolean(),
+    port: z.number().int().min(1).max(65535),
+  }),
+  mcp: z.object({
+    servers: z.record(
+      z.string(),
+      z.union([
+        z.object({
+          command: z.string(),
+          args: z.array(z.string()).optional(),
+          env: z.record(z.string(), z.string()).optional(),
+        }),
+        z.object({ url: z.string() }),
+      ]),
+    ),
+  }),
+  scheduler: z.object({
+    enabled: z.boolean(),
+    timezone: z.string(),
+  }),
+  display: z.object({
+    language: z.string(),
+    showTokenUsage: z.boolean(),
+    showToolCalls: z.boolean(),
+    maxHistoryMessages: z.number().int().positive(),
+  }),
+  groupChat: z.object({
+    maxRounds: z.number().int().positive(),
+    convergenceThreshold: z.number(),
+    enableSessionFile: z.boolean(),
+  }),
+  agents: z.record(z.string(), AGENT_SCHEMA),
+});
 
 export const DEFAULT_CONFIG: AppConfig = {
   version: 1,

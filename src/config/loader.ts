@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_CONFIG, type AppConfig } from './defaults.js';
+import { CONFIG_SCHEMA, DEFAULT_CONFIG, type AppConfig } from './defaults.js';
 
 const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
@@ -26,25 +26,79 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>): Re
   return result;
 }
 
-export function loadConfig(): AppConfig {
+/** Move um config.json corrompido para um backup datado e retorna o caminho. */
+function backupCorruptConfig(): string | null {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = `${CONFIG_PATH}.invalid-${stamp}`;
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
-      const parsed = JSON.parse(raw);
-      currentConfig = deepMerge(DEFAULT_CONFIG, parsed) as AppConfig;
-    } else {
-      currentConfig = structuredClone(DEFAULT_CONFIG);
-    }
+    fs.renameSync(CONFIG_PATH, backupPath);
+    return backupPath;
   } catch {
+    return null;
+  }
+}
+
+export function loadConfig(): AppConfig {
+  if (!fs.existsSync(CONFIG_PATH)) {
     currentConfig = structuredClone(DEFAULT_CONFIG);
+    saveConfig();
+    return currentConfig;
   }
 
-  saveConfig();
+  let raw: string;
+  try {
+    raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Config] Nao foi possivel ler config.json (${message}); usando padroes em memoria. O arquivo NAO foi alterado.`);
+    currentConfig = structuredClone(DEFAULT_CONFIG);
+    return currentConfig;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('config.json deve conter um objeto JSON');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const backup = backupCorruptConfig();
+    console.error(
+      `[Config] config.json corrompido (${message}). ` +
+      (backup ? `Original preservado em: ${backup}. ` : 'Nao foi possivel criar backup; arquivo mantido. ') +
+      'Usando padroes.',
+    );
+    currentConfig = structuredClone(DEFAULT_CONFIG);
+    if (backup) saveConfig();
+    return currentConfig;
+  }
+
+  const merged = deepMerge(DEFAULT_CONFIG, parsed as Record<string, any>) as AppConfig;
+  const validation = CONFIG_SCHEMA.safeParse(merged);
+  if (!validation.success) {
+    console.error('[Config] config.json contem valores invalidos; usando padroes em memoria. Corrija os campos abaixo (o arquivo NAO foi alterado):');
+    for (const issue of validation.error.issues) {
+      console.error(`  - ${issue.path.join('.') || '(raiz)'}: ${issue.message}`);
+    }
+    currentConfig = structuredClone(DEFAULT_CONFIG);
+    return currentConfig;
+  }
+
+  currentConfig = merged;
+  // Regrava apenas se a forma canonica difere (ex.: chaves novas de versoes
+  // mais recentes). Idempotente — evita loop com o watcher de config.
+  if (raw !== JSON.stringify(currentConfig, null, 2)) {
+    saveConfig();
+  }
   return currentConfig;
 }
 
+/** Escrita atomica: grava em .tmp e renomeia por cima, evitando arquivo truncado. */
 export function saveConfig(): void {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(currentConfig, null, 2), 'utf-8');
+  const tmpPath = `${CONFIG_PATH}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(currentConfig, null, 2), 'utf-8');
+  fs.renameSync(tmpPath, CONFIG_PATH);
 }
 
 export function getConfig(): AppConfig {

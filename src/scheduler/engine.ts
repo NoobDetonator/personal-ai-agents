@@ -14,6 +14,9 @@ interface ScheduleRow {
 }
 
 const activeTasks = new Map<string, cron.ScheduledTask>();
+// Tarefas em execucao — um disparo que chega enquanto o anterior ainda roda e
+// pulado, para nao repetir efeitos externos (node-cron nao espera callbacks async)
+const runningTasks = new Set<string>();
 
 export function startScheduler(): void {
   const config = getConfig();
@@ -42,10 +45,19 @@ export function registerCronJob(schedule: ScheduleRow): void {
   }
 
   const task = cron.schedule(schedule.cron_expr, async () => {
-    await executeScheduledTask(schedule.id, schedule.agent_id, schedule.task_prompt);
+    if (runningTasks.has(schedule.id)) {
+      console.warn(`[Scheduler] Tarefa ${schedule.id} ainda em execucao; disparo sobreposto ignorado.`);
+      return;
+    }
+    runningTasks.add(schedule.id);
+    try {
+      await executeScheduledTask(schedule.id, schedule.agent_id, schedule.task_prompt);
 
-    const db = getDb();
-    db.prepare("UPDATE schedules SET last_run = datetime('now') WHERE id = ?").run(schedule.id);
+      const db = getDb();
+      db.prepare("UPDATE schedules SET last_run = datetime('now') WHERE id = ?").run(schedule.id);
+    } finally {
+      runningTasks.delete(schedule.id);
+    }
   }, {
     timezone: config.scheduler.timezone,
   });
