@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { getConfig, updateConfig } from '../config/loader.js';
 import { getDb } from '../db/connection.js';
 import { readSoul, readMemory, readDailyNote } from '../agents/personality.js';
@@ -21,6 +22,11 @@ import { getMcpStatus } from '../mcp/manager.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
+const LUCIDE_FILE = path.join(process.cwd(), 'node_modules', 'lucide', 'dist', 'umd', 'lucide.min.js');
+const LOOPBACK_HOST = '127.0.0.1';
+const MAX_BODY_BYTES = 64 * 1024;
+const SESSION_COOKIE = 'paa_session';
+const SESSION_TOKEN = randomBytes(32).toString('hex');
 
 let server: http.Server | null = null;
 const sseClients = new Set<http.ServerResponse>();
@@ -36,19 +42,116 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
+class HttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+function setSecurityHeaders(res: http.ServerResponse): void {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; '));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isAllowedHost(host: string | undefined, port: number): boolean {
+  if (!host) return false;
+  try {
+    const parsed = new URL(`http://${host}`);
+    const parsedPort = parsed.port ? Number(parsed.port) : 80;
+    return isLoopbackHostname(parsed.hostname) && parsedPort === port;
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedMutationRequest(req: http.IncomingMessage, port: number): boolean {
+  const fetchSite = req.headers['sec-fetch-site'];
+  if (fetchSite === 'cross-site') return false;
+
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    const parsedPort = parsed.port ? Number(parsed.port) : 80;
+    return parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname) && parsedPort === port;
+  } catch {
+    return false;
+  }
+}
+
+function tokensEqual(candidate: string | undefined, expected: string): boolean {
+  if (!candidate) return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
+function hasValidSession(req: http.IncomingMessage): boolean {
+  const bearer = req.headers.authorization?.match(/^Bearer (.+)$/i)?.[1];
+  if (tokensEqual(bearer, SESSION_TOKEN)) return true;
+
+  const cookieHeader = req.headers.cookie ?? '';
+  const sessionCookie = cookieHeader
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.startsWith(`${SESSION_COOKIE}=`))
+    ?.slice(SESSION_COOKIE.length + 1);
+  return tokensEqual(sessionCookie, SESSION_TOKEN);
+}
+
+export function getWebPanelUrl(port: number = getConfig().web.port): string {
+  return `http://localhost:${port}/?token=${encodeURIComponent(SESSION_TOKEN)}`;
+}
+
 function json(res: http.ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data);
+  setSecurityHeaders(res);
+  res.setHeader('Cache-Control', 'no-store');
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
 }
 
 async function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  const contentType = req.headers['content-type'] ?? '';
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    throw new HttpError(415, 'Content-Type deve ser application/json');
+  }
+
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let totalBytes = 0;
+  for await (const chunk of req) {
+    const buffer = chunk as Buffer;
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_BODY_BYTES) {
+      req.resume();
+      throw new HttpError(413, `Corpo excede o limite de ${MAX_BODY_BYTES} bytes`);
+    }
+    chunks.push(buffer);
+  }
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
   } catch {
-    return {};
+    throw new HttpError(400, 'JSON invalido');
   }
 }
 
@@ -212,6 +315,7 @@ async function handleConfirm(req: http.IncomingMessage, res: http.ServerResponse
 // --- SSE ---
 
 function handleSse(res: http.ServerResponse): void {
+  setSecurityHeaders(res);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -232,15 +336,27 @@ function broadcast(event: BusEvent): void {
 // --- Static files ---
 
 function serveStatic(urlPath: string, res: http.ServerResponse): void {
-  const rel = urlPath === '/' ? 'index.html' : urlPath.slice(1);
-  const filePath = path.join(STATIC_DIR, rel);
-  const relCheck = path.relative(STATIC_DIR, filePath);
-  if (relCheck.startsWith('..') || path.isAbsolute(relCheck) || !fs.existsSync(filePath)) {
+  let filePath: string;
+  if (urlPath === '/vendor/lucide.js') {
+    filePath = LUCIDE_FILE;
+  } else {
+    const rel = urlPath === '/' ? 'index.html' : urlPath.slice(1);
+    filePath = path.join(STATIC_DIR, rel);
+    const relCheck = path.relative(STATIC_DIR, filePath);
+    if (relCheck.startsWith('..') || path.isAbsolute(relCheck)) {
+      json(res, 404, { error: 'nao encontrado' });
+      return;
+    }
+  }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    setSecurityHeaders(res);
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('404');
     return;
   }
   const ext = path.extname(filePath).toLowerCase();
+  setSecurityHeaders(res);
+  res.setHeader('Cache-Control', 'no-cache');
   res.writeHead(200, { 'Content-Type': MIME[ext] ?? 'application/octet-stream' });
   res.end(fs.readFileSync(filePath));
 }
@@ -262,44 +378,79 @@ export function startWebServer(): void {
 
   server = http.createServer(async (req, res) => {
     try {
+      setSecurityHeaders(res);
+      if (!isAllowedHost(req.headers.host, config.web.port)) {
+        return json(res, 403, { error: 'host nao permitido' });
+      }
+
+      const method = req.method ?? 'GET';
+      if (!['GET', 'POST'].includes(method)) {
+        res.setHeader('Allow', 'GET, POST');
+        return json(res, 405, { error: 'metodo nao permitido' });
+      }
+      if (method === 'POST' && !isTrustedMutationRequest(req, config.web.port)) {
+        return json(res, 403, { error: 'origem nao permitida' });
+      }
+
       const url = new URL(req.url ?? '/', 'http://localhost');
       const p = url.pathname;
 
-      if (p === '/api/events') return handleSse(res);
-      if (p === '/api/state') return json(res, 200, apiState());
-      if (p === '/api/tasks') return json(res, 200, listTaskRows());
-      if (p === '/api/skills') return json(res, 200, listSkillMetas().map(s => ({ id: s.id, name: s.name, description: s.description })));
-      if (p === '/api/schedules') return json(res, 200, apiSchedules());
-      if (p === '/api/groups') return json(res, 200, apiGroups());
-      if (p === '/api/models') return json(res, 200, getAvailableModels());
-      if (p === '/api/profile') return json(res, 200, { profile: readUserProfile() });
+      const urlToken = url.searchParams.get('token');
+      if (method === 'GET' && p === '/' && urlToken !== null) {
+        if (!tokensEqual(urlToken, SESSION_TOKEN)) {
+          return json(res, 403, { error: 'token de sessao invalido' });
+        }
+        res.writeHead(303, {
+          'Location': '/',
+          'Set-Cookie': `${SESSION_COOKIE}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/`,
+          'Cache-Control': 'no-store',
+        });
+        res.end();
+        return;
+      }
+
+      if (!hasValidSession(req)) {
+        return json(res, 401, { error: 'abra o link seguro exibido no terminal' });
+      }
+
+      if (method === 'GET' && p === '/api/events') return handleSse(res);
+      if (method === 'GET' && p === '/api/state') return json(res, 200, apiState());
+      if (method === 'GET' && p === '/api/tasks') return json(res, 200, listTaskRows());
+      if (method === 'GET' && p === '/api/skills') return json(res, 200, listSkillMetas().map(s => ({ id: s.id, name: s.name, description: s.description })));
+      if (method === 'GET' && p === '/api/schedules') return json(res, 200, apiSchedules());
+      if (method === 'GET' && p === '/api/groups') return json(res, 200, apiGroups());
+      if (method === 'GET' && p === '/api/models') return json(res, 200, getAvailableModels());
+      if (method === 'GET' && p === '/api/profile') return json(res, 200, { profile: readUserProfile() });
 
       const agentMatch = p.match(/^\/api\/agents\/([a-z0-9_-]+)$/);
-      if (agentMatch) {
+      if (method === 'GET' && agentMatch) {
         const data = apiAgent(agentMatch[1]);
         return data ? json(res, 200, data) : json(res, 404, { error: 'agente nao encontrado' });
       }
 
       const convMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
-      if (convMatch) return json(res, 200, apiConversation(convMatch[1]));
+      if (method === 'GET' && convMatch) return json(res, 200, apiConversation(convMatch[1]));
 
-      if (req.method === 'POST' && p === '/api/settings') return await handleSettings(req, res);
-      if (req.method === 'POST' && p === '/api/confirm') return await handleConfirm(req, res);
-      if (req.method === 'POST' && p === '/api/delegations/cancel') {
+      if (method === 'POST' && p === '/api/settings') return await handleSettings(req, res);
+      if (method === 'POST' && p === '/api/confirm') return await handleConfirm(req, res);
+      if (method === 'POST' && p === '/api/delegations/cancel') {
         const body = await readBody(req);
         const ok = cancelDelegation(String(body.id ?? ''));
         return json(res, ok ? 200 : 404, { success: ok });
       }
 
       if (p.startsWith('/api/')) return json(res, 404, { error: 'endpoint desconhecido' });
+      if (method === 'GET') return serveStatic(p, res);
 
-      return serveStatic(p, res);
+      res.setHeader('Allow', 'GET');
+      return json(res, 405, { error: 'metodo nao permitido' });
     } catch (error) {
-      json(res, 500, { error: error instanceof Error ? error.message : 'erro interno' });
+      const status = error instanceof HttpError ? error.status : 500;
+      json(res, status, { error: error instanceof Error ? error.message : 'erro interno' });
     }
   });
 
-  server.listen(config.web.port);
+  server.listen(config.web.port, LOOPBACK_HOST);
   server.on('error', (err) => {
     console.error(`[Web] Painel nao pode iniciar na porta ${config.web.port}: ${err.message}`);
     server = null;

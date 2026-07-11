@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { v4 as uuid } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
 
 export function createSchedulingTools(agentId: string) {
@@ -13,7 +13,7 @@ export function createSchedulingTools(agentId: string) {
     execute: async ({ cronExpression, taskDescription }) => {
       try {
         const db = getDb();
-        const id = uuid();
+        const id = randomUUID();
         db.prepare(
           'INSERT INTO schedules (id, agent_id, cron_expr, task_prompt, enabled) VALUES (?, ?, ?, ?, 1)'
         ).run(id, agentId, cronExpression, taskDescription);

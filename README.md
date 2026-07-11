@@ -20,6 +20,13 @@ npm run dev
 
 O programa cria `config.json`, `data/` e `workspace/` localmente quando necessário. Esses arquivos representam o estado de uso e não são versionados. O painel web local usa a porta `3131` por padrão.
 
+## Segurança do painel
+
+O painel escuta apenas em `127.0.0.1` e usa uma sessão aleatória a cada execução. Abra o link completo impresso pelo terminal; ele contém um token temporário, cria um cookie `HttpOnly` e remove o token da barra de endereço por redirecionamento.
+
+Requisições com Host ou Origin externos são recusadas. A API também limita corpos JSON a 64 KB e aplica headers de segurança no painel.
+
+
 ## Validação
 
 ```bash

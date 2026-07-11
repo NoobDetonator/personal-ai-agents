@@ -9,7 +9,7 @@ import { initRegistry } from './agents/registry.js';
 import { loadSkills, startSkillsWatcher, stopSkillsWatcher, listSkillMetas } from './skills/loader.js';
 import { startScheduler, stopScheduler, getActiveTaskCount } from './scheduler/engine.js';
 import { startHeartbeat, stopHeartbeat } from './heartbeat/engine.js';
-import { startWebServer, stopWebServer } from './web/server.js';
+import { getWebPanelUrl, startWebServer, stopWebServer } from './web/server.js';
 import { startMcpClients, stopMcpClients } from './mcp/manager.js';
 import { initAllAgentTools, startCli } from './chat/cli.js';
 import { getAvailableModels } from './config/models.js';
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
   // 8c. Start web panel
   startWebServer();
   if (getConfig().web.enabled) {
-    console.log(chalk.gray(`  Painel web: `) + chalk.cyan(`http://localhost:${getConfig().web.port}`));
+    console.log(chalk.gray(`  Painel web: `) + chalk.cyan(getWebPanelUrl()));
   }
 
   // 8d. Loud warning when shell auto mode is on (commands run unconfirmed)

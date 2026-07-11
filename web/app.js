@@ -4,6 +4,7 @@
 let state = null;
 
 const $ = (sel) => document.querySelector(sel);
+const closestFromEvent = (event, selector) => event.target instanceof Element ? event.target.closest(selector) : null;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 async function api(path, opts) {
@@ -92,6 +93,22 @@ document.querySelectorAll('.ds-sidebar__item[data-view]').forEach(item => {
   item.addEventListener('click', () => { location.hash = '#/' + item.dataset.view; });
 });
 
+function openAgentTarget(target) {
+  location.hash = '#/agent/' + encodeURIComponent(target.dataset.agentId);
+}
+
+document.addEventListener('click', event => {
+  const target = closestFromEvent(event, '[data-agent-id]');
+  if (target) openAgentTarget(target);
+});
+
+document.addEventListener('keydown', event => {
+  const target = closestFromEvent(event, '[data-agent-id]');
+  if (!target || (event.key !== 'Enter' && event.key !== ' ')) return;
+  event.preventDefault();
+  openAgentTarget(target);
+});
+
 // ---------- Estado global / topbar ----------
 
 async function refreshState() {
@@ -153,7 +170,7 @@ async function renderOverview() {
       agent.fast ? `<span class="ds-badge">⚡fast</span>` : '',
     ].join(' ');
     lines.push(`
-      <div class="tree-node" onclick="location.hash='#/agent/${agent.id}'">
+      <div class="tree-node" role="link" tabindex="0" data-agent-id="${esc(agent.id)}">
         ${indent}<i data-agent-icon="${agentIconFor(agent)}" class="ds-agent-icon ds-icon--sm"></i>
         <b>${esc(agent.name)}</b> ${badges}
         <span class="ds-caption">${fmtTokens(agent.tokens.input + agent.tokens.output)} tokens</span>
@@ -202,7 +219,7 @@ async function renderOverview() {
 async function renderAgents() {
   await refreshState();
   const cards = state.agents.map(a => `
-    <div class="ds-card ds-card--interactive" onclick="location.hash='#/agent/${a.id}'">
+    <div class="ds-card ds-card--interactive" role="link" tabindex="0" data-agent-id="${esc(a.id)}">
       <div class="ds-card__header">
         <div class="ds-inline ds-inline-md">
           <div class="ds-avatar ds-avatar--md"><div class="ds-avatar__fallback"><i data-agent-icon="${agentIconFor(a)}" class="ds-agent-icon ds-icon--md"></i></div></div>
@@ -234,14 +251,14 @@ async function renderAgentDetail(id) {
   const a = await api('/api/agents/' + id);
   if (a.error) {
     $('#view-agent-detail').innerHTML = `
-      <button class="ds-btn ds-btn--ghost" onclick="history.back()"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> voltar</button>
+      <a class="ds-btn ds-btn--ghost" href="#/agents"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> voltar</a>
       <p class="ds-body-md" style="margin-top:12px;">${esc(a.error)}</p>`;
     refreshIcons();
     return;
   }
 
   const convs = (a.conversations || []).map(c => `
-    <div class="ds-list__item" style="cursor:pointer" onclick="loadConversation('${c.id}', '${esc(a.name)}')">
+    <div class="ds-list__item conversation-link" role="button" tabindex="0" data-conversation-id="${esc(c.id)}">
       <i data-lucide="${c.type === 'group' ? 'users' : 'message-circle'}" class="ds-list__icon"></i>
       <span style="flex:1;">${esc(c.title || c.id)}</span>
       <span class="ds-caption">${c.message_count} msgs · ${esc(c.updated_at)}</span>
@@ -257,7 +274,7 @@ async function renderAgentDetail(id) {
   ).join('');
 
   $('#view-agent-detail').innerHTML = `
-    <button class="ds-btn ds-btn--ghost" onclick="location.hash='#/agents'"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> agentes</button>
+    <a class="ds-btn ds-btn--ghost" href="#/agents"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> agentes</a>
     <h2 class="ds-heading-2xl" style="margin:12px 0 16px;">
       ${esc(a.name)} ${roleBadge(a.role)} ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''}
     </h2>
@@ -299,10 +316,19 @@ async function renderAgentDetail(id) {
       <div id="conv-messages"></div>
     </div>
   `;
+  document.querySelectorAll('[data-conversation-id]').forEach(item => {
+    const open = () => loadConversation(item.dataset.conversationId, a.name);
+    item.addEventListener('click', open);
+    item.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    });
+  });
   refreshIcons();
 }
 
-window.loadConversation = async (convId, agentName) => {
+async function loadConversation(convId, agentName) {
   const data = await api('/api/conversations/' + convId);
   const html = (data.messages || []).map(m => `
     <div class="conv-msg">
@@ -314,7 +340,7 @@ window.loadConversation = async (convId, agentName) => {
   $('#conv-title').textContent = 'Conversa ' + convId.slice(0, 8);
   $('#conv-messages').innerHTML = html || '(vazia)';
   $('#conv-card').scrollIntoView({ behavior: 'smooth' });
-};
+}
 
 // ---------- Board ----------
 
@@ -431,11 +457,11 @@ function pendingHtml(pending) {
     return `<p class="ds-body-sm ds-text-muted" style="padding:8px 0;">Nenhum comando aguardando.</p>`;
   }
   return pending.map(p => `
-    <div class="confirm-item" data-confirm-id="${p.id}">
+    <div class="confirm-item" data-confirm-id="${esc(p.id)}">
       <code class="ds-code">${esc(p.command || p.message)}</code>
-      <button class="ds-btn ds-btn--success ds-btn--sm" onclick="answerConfirm('${p.id}','s')">Permitir</button>
-      <button class="ds-btn ds-btn--outline ds-btn--sm" onclick="answerConfirm('${p.id}','a')">Sempre permitir</button>
-      <button class="ds-btn ds-btn--danger ds-btn--sm" onclick="answerConfirm('${p.id}','n')">Negar</button>
+      <button class="ds-btn ds-btn--success ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="s">Permitir</button>
+      <button class="ds-btn ds-btn--outline ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="a">Sempre permitir</button>
+      <button class="ds-btn ds-btn--danger ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="n">Negar</button>
     </div>
   `).join('');
 }
@@ -454,7 +480,7 @@ function renderConfirmBanner(pending) {
   refreshIcons();
 }
 
-window.answerConfirm = async (id, answer) => {
+async function answerConfirm(id, answer) {
   // Feedback otimista: trava e esmaece o item na hora do clique, sem esperar o round-trip da rede.
   document.querySelectorAll(`[data-confirm-id="${id}"]`).forEach(el => {
     el.querySelectorAll('button').forEach(b => { b.disabled = true; });
@@ -470,7 +496,13 @@ window.answerConfirm = async (id, answer) => {
   } finally {
     await refreshState();
   }
-};
+}
+
+document.addEventListener('click', event => {
+  const button = closestFromEvent(event, '[data-confirm-answer]');
+  if (!button) return;
+  void answerConfirm(button.dataset.confirmId, button.dataset.confirmAnswer);
+});
 
 // ---------- Feed ao vivo (SSE) ----------
 

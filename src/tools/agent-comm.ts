@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { v4 as uuid } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
 
 export function createCommTools(agentId: string, dispatchFn: (from: string, to: string, content: string) => Promise<string>) {
@@ -13,7 +13,7 @@ export function createCommTools(agentId: string, dispatchFn: (from: string, to: 
     execute: async ({ toAgent, message }) => {
       try {
         const db = getDb();
-        const id = uuid();
+        const id = randomUUID();
 
         db.prepare(
           'INSERT INTO agent_messages (id, from_agent, to_agent, content) VALUES (?, ?, ?, ?)'
