@@ -41,6 +41,28 @@ test('config parcial: preserva valores do usuario e materializa defaults', () =>
   assert.equal(onDisk.defaultAgent, 'aria');
 });
 
+test('aceita BOM UTF-8 sem classificar o config como corrompido', () => {
+  const backupsBefore = fs.readdirSync(dir).filter(f => f.startsWith('config.json.invalid-')).length;
+  fs.writeFileSync(configPath, '\uFEFF' + JSON.stringify({ web: { port: 4040 } }), 'utf-8');
+
+  loader.loadConfig();
+
+  assert.equal(loader.getConfig().web.port, 4040);
+  const backupsAfter = fs.readdirSync(dir).filter(f => f.startsWith('config.json.invalid-')).length;
+  assert.equal(backupsAfter, backupsBefore);
+  assert.notEqual(fs.readFileSync(configPath, 'utf-8').charCodeAt(0), 0xfeff);
+});
+
+test('modo somente leitura aceita BOM e nao altera bytes do arquivo', () => {
+  const raw = '\uFEFF' + JSON.stringify({ web: { port: 4050 } }, null, 2);
+  fs.writeFileSync(configPath, raw, 'utf-8');
+
+  loader.loadConfig({ writeBack: false });
+
+  assert.equal(loader.getConfig().web.port, 4050);
+  assert.equal(fs.readFileSync(configPath, 'utf-8'), raw);
+});
+
 test('JSON corrompido: preserva original em backup e usa defaults', () => {
   fs.writeFileSync(configPath, '{{{nao-e-json', 'utf-8');
   loader.loadConfig();

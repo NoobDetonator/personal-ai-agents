@@ -12,4 +12,4 @@ npm run typecheck
 npm run build
 ```
 
-Há um driver E2E em `scripts/e2e-driver.mjs`, executado manualmente com um arquivo de passos. Não há script de testes automatizados no `package.json` nesta revisão.
+H? testes automatizados em `tests/`, um driver E2E manual em `scripts/e2e-driver.mjs` e avalia??es comportamentais em `scripts/prompt-eval.mjs`. Use `npm run eval:prompts -- --dry-run` para validar sem API; o modo live consome tokens do provider configurado.

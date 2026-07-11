@@ -38,10 +38,16 @@ function backupCorruptConfig(): string | null {
   }
 }
 
-export function loadConfig(): AppConfig {
+export interface LoadConfigOptions {
+  /** Quando false, carrega e valida sem criar, corrigir ou mover arquivos. */
+  writeBack?: boolean;
+}
+
+export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
+  const writeBack = options.writeBack ?? true;
   if (!fs.existsSync(CONFIG_PATH)) {
     currentConfig = structuredClone(DEFAULT_CONFIG);
-    saveConfig();
+    if (writeBack) saveConfig();
     return currentConfig;
   }
 
@@ -56,21 +62,28 @@ export function loadConfig(): AppConfig {
   }
 
   let parsed: unknown;
+  // JSON.parse nao aceita BOM, embora editores do Windows frequentemente
+  // gravem JSON UTF-8 dessa forma. Remove somente o BOM inicial.
+  const normalizedRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(normalizedRaw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new Error('config.json deve conter um objeto JSON');
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const backup = backupCorruptConfig();
+    const backup = writeBack ? backupCorruptConfig() : null;
     console.error(
       `[Config] config.json corrompido (${message}). ` +
-      (backup ? `Original preservado em: ${backup}. ` : 'Nao foi possivel criar backup; arquivo mantido. ') +
+      (backup
+        ? `Original preservado em: ${backup}. `
+        : writeBack
+          ? 'Nao foi possivel criar backup; arquivo mantido. '
+          : 'Modo somente leitura: arquivo mantido. ') +
       'Usando padroes.',
     );
     currentConfig = structuredClone(DEFAULT_CONFIG);
-    if (backup) saveConfig();
+    if (backup && writeBack) saveConfig();
     return currentConfig;
   }
 
@@ -88,7 +101,7 @@ export function loadConfig(): AppConfig {
   currentConfig = merged;
   // Regrava apenas se a forma canonica difere (ex.: chaves novas de versoes
   // mais recentes). Idempotente — evita loop com o watcher de config.
-  if (raw !== JSON.stringify(currentConfig, null, 2)) {
+  if (writeBack && normalizedRaw !== JSON.stringify(currentConfig, null, 2)) {
     saveConfig();
   }
   return currentConfig;

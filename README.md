@@ -34,9 +34,13 @@ npm run typecheck
 npm run build
 npm test
 node scripts/e2e-driver.mjs <passos.json>
+npm run eval:prompts -- --dry-run
+npm run eval:prompts
 ```
 
 `npm test` roda a suíte de invariantes de segurança em `tests/` (validação de caminhos e symlinks nas operações de arquivo, bloqueio de SSRF na leitura web, allowlist do shell e carregamento confiável de configuração). A mesma suíte roda no CI (GitHub Actions, Linux e Windows) a cada push. O driver E2E é executado com um arquivo de passos apropriado ao cenário.
+
+`eval:prompts -- --dry-run` valida o cat?logo sem chamar API. Sem `--dry-run`, executa cen?rios comportamentais com o provider configurado, consome tokens e retorna exit code 1 se algum criterio falhar.
 
 ## Segurança das ferramentas dos agentes
 

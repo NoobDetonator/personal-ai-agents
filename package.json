@@ -16,6 +16,7 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "eval:prompts": "npm run build && node scripts/prompt-eval.mjs",
     "db:reset": "rimraf data/agents.db"
   },
   "keywords": [
