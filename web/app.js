@@ -29,7 +29,6 @@ function fmtPct(fraction) {
 /** Re-executa os renderizadores de icone apos qualquer innerHTML novo. */
 function refreshIcons() {
   if (window.lucide) lucide.createIcons();
-  if (window.dsAI) dsAI.createIcons();
   if (window.dsAgent) dsAgent.createIcons();
 }
 
@@ -125,28 +124,61 @@ function profileProvenanceCard(provenance) {
     </div>`;
 }
 
-/** Mapeia um agente para um dos 30 icones de papel do design system. */
+/** Mapeia um agente para um icone de ramo, olhando id, nome e descricao (PT/EN).
+    Ordem importa: termos mais especificos vem antes dos genericos. */
+const AGENT_ICON_TABLE = [
+  [['aria'], 'aria'],
+  [['secur', 'seguran', 'pentest'], 'security'],
+  [['devops', 'infra', 'deploy', 'sre'], 'devops'],
+  [['debug'], 'debugger'],
+  [['test', ' qa', 'qualidade'], 'tester'],
+  [['review', 'revis'], 'reviewer'],
+  [['critic', 'crític'], 'critic'],
+  [['database', 'banco de dados', 'sql'], 'database'],
+  [['coder', 'código', 'codigo', 'program', 'frontend', 'backend', 'fullstack', ' dev', 'engenheiro', 'software'], 'coder'],
+  [['arquitet', 'architect'], 'architect'],
+  [['research', 'pesquis', 'investig'], 'investigator'],
+  [['histor'], 'historian'],
+  [['analis', 'analy', 'anális', 'dados', 'data '], 'analyst'],
+  [['scrap', 'crawl'], 'scraper'],
+  [['seo'], 'seo'],
+  [['market', 'divulg', 'publicid', 'social media'], 'marketing'],
+  [['financ', 'contab', 'econom', 'invest'], 'finance'],
+  [['sales', 'vend', 'comercial'], 'sales'],
+  [['legal', 'juríd', 'jurid', 'advog'], 'legal'],
+  [['recrut', 'people', ' rh ', 'hr '], 'hr'],
+  [['suporte', 'support', 'atendimento', 'helpdesk'], 'support'],
+  [['mentor', 'professor', 'ensin', 'tutor', 'coach', 'educa'], 'mentor'],
+  [['translat', 'tradu', 'idioma'], 'translator'],
+  [['narrad', 'writer', 'escrit', 'redat', 'roteir', 'copywrit', 'conteúdo', 'conteudo', 'blog'], 'writer'],
+  [['creativ', 'criativ', 'design', 'arte', ' ux', ' ui'], 'creative'],
+  [['resum', 'summar'], 'summarizer'],
+  [['format'], 'formatter'],
+  [['matemát', 'matemat', 'math', 'cálcul', 'calcul'], 'math'],
+  [['ético', 'etico', 'ethic'], 'ethical'],
+  [['planej', 'planner', 'plano', 'gerente', 'manager', 'coorden', 'projeto', 'project'], 'planner'],
+];
+
 function agentIconFor(agent) {
-  const id = (agent.id || '').toLowerCase();
-  const table = [
-    ['aria', 'aria'], ['critic', 'critic'], ['critico', 'critic'],
-    ['creativ', 'creative'], ['design', 'creative'],
-    ['narrad', 'writer'], ['writer', 'writer'], ['escrito', 'writer'], ['redator', 'writer'], ['roteirista', 'writer'],
-    ['coder', 'coder'], ['dev', 'coder'], ['frontend', 'coder'], ['code', 'coder'],
-    ['planej', 'planner'], ['planner', 'planner'], ['project', 'planner'],
-    ['test', 'tester'], ['review', 'reviewer'], ['debug', 'debugger'],
-    ['analy', 'analyst'], ['secur', 'security'], ['support', 'support'],
-    ['sales', 'sales'], ['hr', 'hr'], ['legal', 'legal'], ['seo', 'seo'],
-    ['translat', 'translator'], ['mentor', 'mentor'], ['database', 'database'],
-  ];
-  for (const [needle, icon] of table) {
-    if (id.includes(needle)) return icon;
+  if (agent.role === 'principal' || (agent.id || '').toLowerCase() === 'aria') return 'aria';
+  const hay = ` ${agent.id || ''} ${agent.name || ''} ${agent.description || ''} `.toLowerCase();
+  for (const [needles, icon] of AGENT_ICON_TABLE) {
+    if (needles.some(n => hay.includes(n))) return icon;
   }
-  return agent.role === 'principal' ? 'aria' : agent.role === 'manager' ? 'planner' : 'assistant';
+  // Sem ramo identificado: gestores viram planner, o resto usa o icone geral
+  return agent.role === 'manager' ? 'planner' : 'generic';
+}
+
+/** Avatar do agente: fundo com a cor de acento do ramo + icone. */
+function agentAvatar(agent, size = 'md') {
+  const icon = agentIconFor(agent);
+  return `<div class="ds-avatar ds-avatar--${esc(size)} agent-avatar agent-avatar--${icon}">
+    <i data-agent-icon="${icon}" class="ds-agent-icon ds-agent-icon--${size}"></i>
+  </div>`;
 }
 
 function aiBadge(provider, model) {
-  return `<span class="ds-ai-badge ds-ai-badge--${esc(provider)}" title="${esc(model)}"><i data-ai-icon="${esc(provider)}" class="ds-ai-icon"></i>${esc(model)}</span>`;
+  return `<span class="ds-ai-badge ds-ai-badge--${esc(provider)}" title="${esc(provider)}">${esc(model)}</span>`;
 }
 
 // ---------- Navegacao ----------
@@ -359,7 +391,7 @@ async function renderOverview() {
     ].join('');
     return `
       <div class="load-row" role="link" tabindex="0" data-agent-id="${esc(a.agentId)}">
-        <span class="load-row__name"><b>${esc(a.name)}</b>${a.team ? ` <span class="ds-caption">${esc(a.team)}</span>` : ''}</span>
+        <span class="load-row__name"><i data-agent-icon="${agentIconFor(state.agents.find(ag => ag.id === a.agentId) || { id: a.agentId, name: a.name })}" class="ds-agent-icon ds-agent-icon--sm"></i><b>${esc(a.name)}</b>${a.team ? ` <span class="ds-caption">${esc(a.team)}</span>` : ''}</span>
         <div class="load-row__bar" title="${fmtTokens(a.inputTokens)}↓ entrada · ${fmtTokens(a.outputTokens)}↑ saída">
           <span style="width:${((a.inputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-action-primary);"></span>
           <span style="width:${((a.outputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-feedback-violet);"></span>
@@ -490,7 +522,7 @@ async function renderAgents() {
     <div class="ds-card ds-card--interactive" role="link" tabindex="0" data-agent-id="${esc(a.id)}">
       <div class="ds-card__header">
         <div class="ds-inline ds-inline-md">
-          <div class="ds-avatar ds-avatar--md"><div class="ds-avatar__fallback"><i data-agent-icon="${agentIconFor(a)}" class="ds-agent-icon ds-icon--md"></i></div></div>
+          ${agentAvatar(a, 'md')}
           <div>
             <div class="ds-heading-md">${esc(a.name)}</div>
             <div class="ds-caption">${esc(a.description)}</div>
@@ -544,9 +576,12 @@ async function renderAgentDetail(id) {
 
   $('#view-agent-detail').innerHTML = `
     <a class="ds-btn ds-btn--ghost" href="#/agents"><i data-lucide="arrow-left" class="ds-icon ds-icon--sm"></i> agentes</a>
-    <h2 class="ds-heading-2xl" style="margin:12px 0 16px;">
-      ${esc(a.name)} ${roleBadge(a.role)} ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''} ${profileBadge(a.profileProvenance)}
-    </h2>
+    <div class="agent-detail-header">
+      ${agentAvatar(a, 'lg')}
+      <h2 class="ds-heading-2xl">
+        ${esc(a.name)} ${roleBadge(a.role)} ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''} ${profileBadge(a.profileProvenance)}
+      </h2>
+    </div>
 
     <div class="ds-card" style="margin-bottom:16px;">
       <div class="ds-card__body">

@@ -1,5 +1,9 @@
 /* ============================================================================
    AGENT ICONS — CSS
+   O elemento <i data-agent-icon> é SUBSTITUÍDO pelo <svg> (a classe fica no
+   próprio svg), então as regras de traço vivem direto em .ds-agent-icon.
+   Cada ramo define --agent-accent, usado no traço do ícone e no fundo do
+   avatar (.agent-avatar).
    ============================================================================ */
 
 .ds-agent-icon {
@@ -9,11 +13,7 @@
   flex-shrink: 0;
   width: var(--p-size-5);
   height: var(--p-size-5);
-}
-
-.ds-agent-icon svg {
-  width: 100%;
-  height: 100%;
+  color: var(--agent-accent, currentColor);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.75;
@@ -29,10 +29,81 @@
 .ds-agent-icon--xl { width: var(--p-size-8); height: var(--p-size-8); }
 .ds-agent-icon--2xl { width: var(--p-size-10); height: var(--p-size-10); }
 
-/* Role based colors (Optional use) */
-.ds-agent-icon--aria { color: var(--ds-action-primary); }
-.ds-agent-icon--security { color: var(--ds-feedback-danger); }
-.ds-agent-icon--tester { color: var(--ds-feedback-warning); }
-.ds-agent-icon--coder { color: var(--ds-feedback-info); }
-.ds-agent-icon--reviewer { color: var(--ds-feedback-success); }
-.ds-agent-icon--creative { color: var(--ds-feedback-violet); }
+/* ---------- Cor de acento por ramo ---------- */
+
+.ds-agent-icon--aria,         .agent-avatar--aria         { --agent-accent: #8b5cf6; }
+
+.ds-agent-icon--generic,      .agent-avatar--generic,
+.ds-agent-icon--assistant,    .agent-avatar--assistant    { --agent-accent: var(--ds-action-primary); }
+
+/* Código, dados e infraestrutura */
+.ds-agent-icon--coder,        .agent-avatar--coder,
+.ds-agent-icon--devops,       .agent-avatar--devops,
+.ds-agent-icon--scraper,      .agent-avatar--scraper,
+.ds-agent-icon--math,         .agent-avatar--math,
+.ds-agent-icon--analyst,      .agent-avatar--analyst,
+.ds-agent-icon--investigator, .agent-avatar--investigator,
+.ds-agent-icon--support,      .agent-avatar--support      { --agent-accent: var(--ds-feedback-info); }
+
+/* Risco e avaliação crítica */
+.ds-agent-icon--security,     .agent-avatar--security,
+.ds-agent-icon--critic,       .agent-avatar--critic,
+.ds-agent-icon--ethical,      .agent-avatar--ethical      { --agent-accent: var(--ds-feedback-danger); }
+
+/* Execução, teste e planejamento */
+.ds-agent-icon--tester,       .agent-avatar--tester,
+.ds-agent-icon--debugger,     .agent-avatar--debugger,
+.ds-agent-icon--executor,     .agent-avatar--executor,
+.ds-agent-icon--planner,      .agent-avatar--planner,
+.ds-agent-icon--historian,    .agent-avatar--historian,
+.ds-agent-icon--mentor,       .agent-avatar--mentor       { --agent-accent: var(--ds-feedback-warning); }
+
+/* Aprovação e negócios */
+.ds-agent-icon--reviewer,     .agent-avatar--reviewer,
+.ds-agent-icon--translator,   .agent-avatar--translator,
+.ds-agent-icon--seo,          .agent-avatar--seo,
+.ds-agent-icon--hr,           .agent-avatar--hr,
+.ds-agent-icon--sales,        .agent-avatar--sales,
+.ds-agent-icon--finance,      .agent-avatar--finance      { --agent-accent: var(--ds-feedback-success); }
+
+/* Conteúdo e criatividade */
+.ds-agent-icon--writer,       .agent-avatar--writer,
+.ds-agent-icon--creative,     .agent-avatar--creative,
+.ds-agent-icon--marketing,    .agent-avatar--marketing    { --agent-accent: var(--ds-feedback-violet); }
+
+/* Estrutura e documentos */
+.ds-agent-icon--architect,    .agent-avatar--architect,
+.ds-agent-icon--database,     .agent-avatar--database,
+.ds-agent-icon--legal,        .agent-avatar--legal,
+.ds-agent-icon--summarizer,   .agent-avatar--summarizer,
+.ds-agent-icon--formatter,    .agent-avatar--formatter    { --agent-accent: var(--ds-action-primary); }
+
+/* ---------- Avatar com fundo tintado pelo ramo ---------- */
+
+.agent-avatar {
+  background:
+    radial-gradient(130% 130% at 25% 20%,
+      color-mix(in srgb, var(--agent-accent, var(--ds-action-primary)) 30%, transparent),
+      transparent 62%),
+    var(--ds-surface-neu-base);
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--ds-action-primary)) 35%, transparent);
+  box-shadow: var(--ds-shadow-outset-xs);
+}
+
+.agent-avatar .ds-agent-icon {
+  width: 58%;
+  height: 58%;
+}
+
+/* Aria: emblema com brilho e fundo em gradiente duplo (indigo -> fúcsia) */
+.agent-avatar--aria {
+  background:
+    radial-gradient(120% 120% at 22% 18%, rgba(99, 102, 241, 0.35), transparent 58%),
+    radial-gradient(130% 130% at 82% 88%, rgba(217, 70, 239, 0.30), transparent 58%),
+    var(--ds-surface-neu-base);
+  border-color: color-mix(in srgb, #8b5cf6 50%, transparent);
+}
+
+.ds-agent-icon--aria {
+  filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.45));
+}

@@ -165,6 +165,12 @@ body {
 }
 .load-row:last-child { border-bottom: none; }
 .load-row:hover .load-row__name b { color: var(--ds-action-primary); }
+.load-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-1-5);
+  min-width: 0;
+}
 .load-row__bar {
   display: flex;
   height: 10px;
@@ -235,6 +241,13 @@ body {
 .thinking-label { color: var(--ds-text-muted); font-style: italic; }
 
 /* Detalhe do agente */
+.agent-detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-3);
+  margin: var(--p-space-3) 0 var(--p-space-4);
+}
+
 .app-doc {
   background: var(--ds-surface-sunken);
   box-shadow: var(--ds-shadow-inset-sm);

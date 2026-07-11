@@ -1,28 +1,26 @@
 /* ============================================================================
-   AI ICONS & MODELS — BRAND TOKENS
-   Cores e estilos específicos para os provedores de IA.
+   AI MODELS — BRAND TOKENS & BADGE
+   Cores por provedor de IA, usadas apenas no badge de modelo (só texto).
    ============================================================================ */
 
 :root {
-  /* Google Gemini (Gradient) */
+  /* Google Gemini */
   --ai-google-color: #1a73e8;
-  --ai-google-gradient: linear-gradient(135deg, #4285F4, #9B72CB, #D96570, #F49C56);
   --ai-google-bg: rgba(66, 133, 244, 0.1);
 
-  /* OpenAI (Green) */
+  /* OpenAI */
   --ai-openai-color: #10a37f;
   --ai-openai-bg: rgba(16, 163, 127, 0.1);
 
-  /* Anthropic / Claude (Peach/Orange) */
+  /* Anthropic / Claude */
   --ai-anthropic-color: #cc8467;
   --ai-anthropic-bg: rgba(204, 132, 103, 0.1);
 
-  /* Meta / Llama (Blue Gradient) */
+  /* Meta / Llama */
   --ai-meta-color: #0668E1;
-  --ai-meta-gradient: linear-gradient(135deg, #0080fb, #004ee3);
   --ai-meta-bg: rgba(6, 104, 225, 0.1);
 
-  /* Mistral (Orange/Yellow) */
+  /* Mistral */
   --ai-mistral-color: #f7a932;
   --ai-mistral-bg: rgba(247, 169, 50, 0.1);
 
@@ -30,58 +28,18 @@
   --ai-generic-color: var(--ds-action-primary);
   --ai-generic-bg: var(--ds-action-primary-subtle);
 
-  /* DeepSeek (Blue) */
+  /* DeepSeek */
   --ai-deepseek-color: #4d6bfe;
   --ai-deepseek-bg: rgba(77, 107, 254, 0.1);
 
-  /* Z.AI (Indigo/Violet, marca GLM) */
+  /* Z.AI (GLM) */
   --ai-zai-color: #7c5cfc;
   --ai-zai-bg: rgba(124, 92, 252, 0.1);
 
-  /* NVIDIA (Verde) */
+  /* NVIDIA */
   --ai-nvidia-color: #76b900;
   --ai-nvidia-bg: rgba(118, 185, 0, 0.1);
 }
-
-/* ============================================================================
-   UTILITY CLASSES FOR AI ICONS
-   ============================================================================ */
-
-.ds-ai-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--p-size-5);
-  height: var(--p-size-5);
-}
-
-.ds-ai-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* Base colors for SVG vectors (when not using gradients) */
-.ds-ai-icon--google svg    { color: var(--ai-google-color); }
-.ds-ai-icon--openai svg    { color: var(--ai-openai-color); }
-.ds-ai-icon--anthropic svg { color: var(--ai-anthropic-color); }
-.ds-ai-icon--meta svg      { color: var(--ai-meta-color); }
-.ds-ai-icon--mistral svg   { color: var(--ai-mistral-color); }
-.ds-ai-icon--generic svg   { color: var(--ai-generic-color); }
-.ds-ai-icon--deepseek svg  { color: var(--ai-deepseek-color); }
-.ds-ai-icon--zai svg       { color: var(--ai-zai-color); }
-.ds-ai-icon--nvidia svg    { color: var(--ai-nvidia-color); }
-
-/* Sizes */
-.ds-ai-icon--xs { width: var(--p-size-3); height: var(--p-size-3); }
-.ds-ai-icon--sm { width: var(--p-size-4); height: var(--p-size-4); }
-.ds-ai-icon--md { width: var(--p-size-5); height: var(--p-size-5); }
-.ds-ai-icon--lg { width: var(--p-size-6); height: var(--p-size-6); }
-.ds-ai-icon--xl { width: var(--p-size-8); height: var(--p-size-8); }
-.ds-ai-icon--2xl { width: var(--p-size-10); height: var(--p-size-10); }
-
-/* SVG definition for Gradients (used via defs and url(#id)) */
-/* As we inject SVGs, gradients are defined inline in the SVG string if needed. */
 
 /* ============================================================================
    AI MODEL CHIP / BADGE
