@@ -46,38 +46,117 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max) + `\n... [truncado: ${text.length - max} caracteres omitidos]`;
 }
 
-function runShell(command: string, cwd: string, timeoutSec: number): Promise<{
+function terminateProcessTree(
+  child: ReturnType<typeof spawn>,
+  isWin: boolean,
+): Promise<string | null> {
+  const pid = child.pid;
+  if (!pid) {
+    child.kill();
+    return Promise.resolve('PID do shell indisponivel; somente o processo direto recebeu sinal.');
+  }
+
+  if (!isWin) {
+    try {
+      // O shell e iniciado como lider de grupo; PID negativo sinaliza todos
+      // os descendentes, nao apenas /bin/sh.
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      child.kill('SIGTERM');
+      return Promise.resolve('Nao foi possivel sinalizar o grupo; somente o shell direto recebeu SIGTERM.');
+    }
+    const forceKill = setTimeout(() => {
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* grupo ja terminou */ }
+    }, 500);
+    forceKill.unref();
+    return Promise.resolve(null);
+  }
+
+  return new Promise(resolve => {
+    let settled = false;
+    let fallback: NodeJS.Timeout | undefined;
+    let stderr = '';
+    const finish = (error: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (fallback) clearTimeout(fallback);
+      resolve(error);
+    };
+
+    // child.kill() no Windows encerra somente o PowerShell. taskkill /T
+    // encerra tambem processos iniciados pelo comando.
+    const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    killer.stderr.on('data', data => { stderr += String(data); });
+    killer.once('close', code => {
+      if (code === 0) {
+        finish(null);
+        return;
+      }
+      child.kill();
+      finish(`taskkill /T falhou (codigo ${code ?? 'desconhecido'}): ${stderr.trim() || 'sem detalhe'}`);
+    });
+    killer.once('error', error => {
+      child.kill();
+      finish(`Nao foi possivel iniciar taskkill /T: ${error.message}`);
+    });
+    fallback = setTimeout(() => {
+      child.kill();
+      finish('taskkill /T nao respondeu em 1 segundo; somente o shell direto foi encerrado.');
+    }, 1000);
+  });
+}
+
+export function runShell(command: string, cwd: string, timeoutSec: number): Promise<{
   exitCode: number | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  terminationError?: string;
 }> {
   return new Promise(resolve => {
     const isWin = process.platform === 'win32';
     const child = isWin
       ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd, windowsHide: true })
-      : spawn('/bin/sh', ['-c', command], { cwd });
+      : spawn('/bin/sh', ['-c', command], { cwd, detached: true });
 
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let terminationError: string | undefined;
+    let settled = false;
+
+    const finish = (exitCode: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr, timedOut, ...(terminationError ? { terminationError } : {}) });
+    };
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      void (async () => {
+        terminationError = (await terminateProcessTree(child, isWin)) ?? undefined;
+        // Descendentes podem manter os pipes abertos quando o SO nega o
+        // encerramento da arvore. O retorno da tool continua limitado.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish(null);
+      })();
     }, timeoutSec * 1000);
 
     child.stdout.on('data', d => { stdout += String(d); });
     child.stderr.on('data', d => { stderr += String(d); });
 
-    child.on('error', err => {
-      clearTimeout(timer);
-      resolve({ exitCode: null, stdout, stderr: stderr + '\n' + err.message, timedOut });
+    child.once('error', err => {
+      stderr += '\n' + err.message;
+      if (!timedOut) finish(null);
     });
 
-    child.on('close', code => {
-      clearTimeout(timer);
-      resolve({ exitCode: code, stdout, stderr, timedOut });
+    child.once('close', code => {
+      if (!timedOut) finish(code);
     });
   });
 }
@@ -159,12 +238,15 @@ export function createShellTools(agentId: string) {
         }
       }
 
-      const { exitCode, stdout, stderr, timedOut } = await runShell(command, workdir, shellCfg.timeoutSec);
+      const { exitCode, stdout, stderr, timedOut, terminationError } = await runShell(command, workdir, shellCfg.timeoutSec);
       logCommand(agentId, command, rel || '.', timedOut ? null : exitCode);
 
       if (timedOut) {
         return {
-          error: `Comando excedeu o timeout de ${shellCfg.timeoutSec}s e foi encerrado.`,
+          error: `Comando excedeu o timeout de ${shellCfg.timeoutSec}s.` +
+            (terminationError
+              ? ` Nao foi possivel garantir o encerramento da arvore: ${terminationError}`
+              : ' A arvore de processos foi encerrada.'),
           cwd: rel || '.',
           stdout: truncate(stdout, 4000),
           stderr: truncate(stderr, 2000),

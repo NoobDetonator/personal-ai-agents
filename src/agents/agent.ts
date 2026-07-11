@@ -107,13 +107,41 @@ export function looksUnfinished(text: string, finishReason: string): boolean {
 export const CONTINUE_HINT =
   '[Sistema] Seu turno anterior foi interrompido no meio do trabalho (ou terminou prometendo uma acao). Continue EXATAMENTE de onde parou e conclua o que falta usando suas ferramentas. Nao repita o que ja foi feito; nao descreva o plano de novo — execute.';
 
-// Anti-fabricacao: padroes de "alegou que executou algo" — se aparecem numa
-// resposta SEM nenhuma tool call no turno, o turno e refeito com correcao
-const FABRICATION_CLAIM =
-  /(comando (foi |ja )?executad|executei|rodei o comando|arquivo .{0,60}(criado|salvo|gerado|deletado)|criei o arquivo|deletei o arquivo|agendamento .{0,40}(criado|deletado)|tarefa agendada)/i;
+// Alegacoes positivas de trabalho verificavel. A deteccao roda por clausula
+// para distinguir "os testes passaram, mas nao executei o build" de uma
+// negacao honesta como "nao pude confirmar que os testes passaram".
+const FABRICATION_CLAIMS = [
+  /\b(?<action>executei|rodei|criei|salvei|deletei|apaguei|editei|corrigi|implementei|agendei|publiquei|enviei)\b/i,
+  /\b(?:comando|script|arquivo|relatorio|agendamento|tarefa|email)\b.{0,80}?\b(?<action>executad[oa]|criad[oa]|salv[oa]|gerad[oa]|deletad[oa]|apagad[oa]|editad[oa]|corrigid[oa]|agendad[oa]|publicad[oa]|enviad[oa])\b/i,
+  /\b(?:testes?|typecheck|build|lint)\b.{0,40}?\b(?<action>passaram|passou|aprovad[oa]s?|sem erros?|verde)\b/i,
+  /\b(?<action>abri|verifiquei|conferi|inspecionei|pesquisei|consultei)\b.{0,60}?\b(?:arquivo|site|pagina|browser|console|dados|repositorio|resultado|documentacao)\b/i,
+];
+
+function normalizeClaimText(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function clauseHasPositiveClaim(clause: string): boolean {
+  const normalized = normalizeClaimText(clause);
+  for (const pattern of FABRICATION_CLAIMS) {
+    const match = pattern.exec(normalized);
+    if (!match) continue;
+    const action = match.groups?.action ?? match[0];
+    const actionOffset = match.index + match[0].lastIndexOf(action);
+    const throughAction = normalized.slice(0, actionOffset + action.length);
+    // Negacao ou incerteza imediatamente antes do verbo da alegacao torna a
+    // frase uma declaracao honesta de limite, nao fabricacao.
+    if (/\b(nao|nunca|nem|sem)\b[^.!?;\n]{0,60}$/.test(throughAction)) continue;
+    return true;
+  }
+  return false;
+}
 
 export function looksFabricated(text: string, toolCallCount: number): boolean {
-  return toolCallCount === 0 && FABRICATION_CLAIM.test(text);
+  if (toolCallCount > 0) return false;
+  return text
+    .split(/(?:[.!?;\n]+|\bmas\b|\bporem\b)/i)
+    .some(clauseHasPositiveClaim);
 }
 
 export const ANTI_FABRICATION_RETRY_HINT =
@@ -479,6 +507,7 @@ export class Agent {
       );
 
     let result = await run();
+    let turnToolCallCount = result.toolCallCount;
 
     // Auto-continuacao: turno cortado no meio do trabalho → continua (max 2x)
     let continuations = 0;
@@ -487,10 +516,11 @@ export class Agent {
       messages.push({ role: 'assistant', content: result.text });
       messages.push({ role: 'user', content: CONTINUE_HINT });
       result = await run();
+      turnToolCallCount += result.toolCallCount;
     }
 
     // Anti-fabricacao: alegou execucao sem chamar ferramenta → refaz uma vez
-    if (looksFabricated(result.text, result.toolCallCount)) {
+    if (looksFabricated(result.text, turnToolCallCount)) {
       result = await this.chatStream(
         messages,
         { onToolCall: opts?.onToolCall },

@@ -6,6 +6,7 @@ import { getAgent, getRole, isSuperiorOf } from '../agents/registry.js';
 import { getConfig } from '../config/loader.js';
 import * as renderer from '../chat/renderer.js';
 import { emitBus } from '../web/bus.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 export interface TaskRow {
   id: string;
@@ -44,6 +45,15 @@ export function listActiveDelegations(): Array<{ id: string; from: string; to: s
   return Array.from(activeDelegations.values()).map(({ id, from, to, taskId, startedAt }) => ({
     id, from, to, taskId, startedAt,
   }));
+}
+
+export function partitionTasksForDeletion(
+  rows: TaskRow[],
+  activeTaskIds: Iterable<string>,
+): { deletableIds: string[]; skippedActive: number } {
+  const active = new Set(activeTaskIds);
+  const deletableIds = rows.filter(row => !active.has(row.id)).map(row => row.id);
+  return { deletableIds, skippedActive: rows.length - deletableIds.length };
 }
 
 /** Cancela uma delegacao em andamento (chamado pelo painel web). */
@@ -286,6 +296,9 @@ export function createTaskTools(agentId: string): ToolSet {
       taskId: z.string().describe('ID da tarefa a deletar'),
     }),
     execute: async ({ taskId }) => {
+      if (listActiveDelegations().some(item => item.taskId === taskId)) {
+        return { error: `Tarefa "${taskId}" esta em execucao e nao pode ser deletada. Cancele a delegacao primeiro.` };
+      }
       const info = getDb().prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
       if (info.changes === 0) return { error: `Tarefa "${taskId}" nao encontrada.` };
       emitBus('board_changed', { taskId, action: 'deleted' });
@@ -294,24 +307,58 @@ export function createTaskTools(agentId: string): ToolSet {
   });
 
   const clearBoard = tool({
-    description: 'Apagar VARIAS tarefas do board de uma vez, por filtro (status e/ou equipe). Se nenhum filtro for passado, apaga TODAS as tarefas — use com cuidado e so quando o usuario pedir explicitamente para limpar o board.',
+    description: 'Apagar VARIAS tarefas do board por filtro. Exige confirmacao humana e preserva tarefas com delegacao em execucao.',
     inputSchema: z.object({
       status: z.enum(['pending', 'in_progress', 'done', 'failed', 'cancelled']).optional().describe('So apagar tarefas com esse status'),
       team: z.string().optional().describe('So apagar tarefas dessa equipe'),
     }),
     execute: async ({ status, team }) => {
-      const db = getDb();
-      const where: string[] = [];
-      const params: string[] = [];
-      if (status) { where.push('status = ?'); params.push(status); }
-      if (team) { where.push('team = ?'); params.push(team); }
-      const sql = `DELETE FROM tasks ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
-      const info = db.prepare(sql).run(...params);
-      emitBus('board_changed', { action: 'cleared', count: info.changes });
-      return { success: true, deleted: info.changes };
+      const initialRows = listTaskRows(status, team);
+      const initial = partitionTasksForDeletion(
+        initialRows,
+        listActiveDelegations().map(item => item.taskId),
+      );
+
+      if (initial.deletableIds.length === 0) {
+        return { success: true, deleted: 0, skippedActive: initial.skippedActive };
+      }
+
+      const filters = [
+        status ? `status=${status}` : null,
+        team ? `equipe=${team}` : null,
+      ].filter(Boolean).join(', ');
+      const scope = filters || 'todo o board';
+      const confirmation = await askConfirmation(
+        `Apagar permanentemente ${initial.deletableIds.length} tarefa(s) de ${scope}?` +
+          (initial.skippedActive ? ` ${initial.skippedActive} tarefa(s) ativa(s) serao preservadas.` : ''),
+        { allowAlways: false },
+      );
+      if (confirmation.answer === 'no') {
+        return {
+          error: confirmation.timedOut
+            ? 'Confirmacao expirou. Nenhuma tarefa foi apagada.'
+            : 'Limpeza do board negada pelo usuario. Nenhuma tarefa foi apagada.',
+        };
+      }
+
+      // Recalcula depois da confirmacao: uma tarefa pode ter iniciado enquanto
+      // a decisao humana estava pendente.
+      const rows = listTaskRows(status, team);
+      const { deletableIds, skippedActive } = partitionTasksForDeletion(
+        rows,
+        listActiveDelegations().map(item => item.taskId),
+      );
+
+      let deleted = 0;
+      if (deletableIds.length > 0) {
+        const placeholders = deletableIds.map(() => '?').join(', ');
+        const info = getDb().prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...deletableIds);
+        deleted = info.changes;
+      }
+      emitBus('board_changed', { action: 'cleared', count: deleted });
+      return { success: true, deleted, skippedActive };
     },
   });
-
   const delegateTasks = tool({
     description:
       'Delegar VARIOS trabalhos em paralelo (para tarefas independentes). Cada item vai para um agente com seu proprio prompt completo.',

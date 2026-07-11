@@ -119,6 +119,7 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
       contextData: recalledContext,
     });
     renderer.renderStreamEnd();
+    let turnToolCallCount = result.toolCallCount;
 
     // Auto-continuacao: turno cortado no meio do trabalho (limite de passos/
     // tokens) ou terminado com promessa nao cumprida → continua (max 2x)
@@ -141,11 +142,12 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
         contextData: recalledContext,
       });
       renderer.renderStreamEnd();
+      turnToolCallCount += result.toolCallCount;
     }
 
     // Anti-fabricacao: alegou execucao sem chamar nenhuma ferramenta →
     // descarta a resposta e refaz o turno uma unica vez, com correcao
-    if (looksFabricated(result.text, result.toolCallCount)) {
+    if (looksFabricated(result.text, turnToolCallCount)) {
       renderer.renderSystemMessage('(anti-fabricacao: a resposta alegou execucao sem usar ferramentas — refazendo o turno)');
       renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
       result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {

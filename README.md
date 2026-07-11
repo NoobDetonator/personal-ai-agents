@@ -40,13 +40,15 @@ npm run eval:prompts
 
 `npm test` roda a suíte de invariantes de segurança em `tests/` (validação de caminhos e symlinks nas operações de arquivo, bloqueio de SSRF na leitura web, allowlist do shell e carregamento confiável de configuração). A mesma suíte roda no CI (GitHub Actions, Linux e Windows) a cada push. O driver E2E é executado com um arquivo de passos apropriado ao cenário.
 
-`eval:prompts -- --dry-run` valida o cat?logo sem chamar API. Sem `--dry-run`, executa cen?rios comportamentais com o provider configurado, consome tokens e retorna exit code 1 se algum criterio falhar.
+`eval:prompts -- --dry-run` valida o catalogo sem chamar API. Sem `--dry-run`, executa cenarios comportamentais com o provider configurado, consome tokens e retorna exit code 1 se algum criterio falhar.
 
 ## Segurança das ferramentas dos agentes
 
 - Operações de arquivo ficam restritas a `workspace/` por padrão (`fileOps.allowedPaths`); caminhos são resolvidos fisicamente, então symlinks/junctions não escapam das pastas permitidas. `config.json`, `.env*`, bancos `.db`, `.git/` e `node_modules/` nunca são acessíveis, e sobrescrever/deletar pede confirmação.
 - A leitura de páginas web recusa endereços privados/reservados (incluindo `localhost` e metadata de cloud), URLs com credenciais e revalida cada redirecionamento; respostas são limitadas a 1 MB.
 - A allowlist do shell não aceita comandos com encadeamento (`;`, `&`, `|`, `<`, `>`), substituição (`` ` ``, `$`) ou múltiplas linhas — esses sempre exigem confirmação.
+- O timeout do shell encerra a arvore de processos quando o sistema operacional permite e retorna um alerta explicito quando essa garantia e negada pelo ambiente.
+- A limpeza em massa do board exige confirmacao humana sem permissao permanente e nunca remove tarefas com delegacao ativa.
 - `config.json` é validado ao carregar; um arquivo corrompido é preservado em backup datado (nunca sobrescrito silenciosamente) e a escrita é atômica.
 
 ## Estrutura
