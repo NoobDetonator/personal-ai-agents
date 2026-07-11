@@ -5,7 +5,13 @@ import path from 'node:path';
 import type { Agent } from '../agents/agent.js';
 import * as registry from '../agents/registry.js';
 import { getAgentDir, writeMemory, readSoul } from '../agents/personality.js';
-import { getConfig } from '../config/loader.js';
+import { getConfig, updateAgentInConfig } from '../config/loader.js';
+import {
+  composeSoul,
+  listProfiles,
+  validateSoulText,
+  validateSeedMemory,
+} from '../agents/prompt-composer.js';
 
 /**
  * Tools de gestao de agentes. `creatorId` e o agente dono do toolset —
@@ -14,10 +20,11 @@ import { getConfig } from '../config/loader.js';
 export function createAgentManagementTools(creatorId: string, onAgentCreated?: (agent: Agent) => void) {
   const createAgentTool = tool({
     description:
-      'Criar um novo agente subordinado a voce. Escreva uma personalidade (soul) CONCISA e focada no papel (max ~150 palavras). Use team para agrupar agentes que trabalham no mesmo projeto.',
+      'Criar um novo agente subordinado a voce. PREFIRA profileId (veja listAgentProfiles): a soul e composta automaticamente a partir do perfil, e "personality" vira a funcao especifica (1-2 frases). Sem profileId, "personality" e a soul completa — CONCISA (max ~150 palavras). Use team para agrupar agentes do mesmo projeto.',
     inputSchema: z.object({
       name: z.string().describe('Nome do agente (ex: "roteirista1"). Minusculas, sem espacos.'),
-      personality: z.string().optional().describe('Personalidade/especialidade do agente (vira o soul.md dele)'),
+      profileId: z.string().optional().describe('Perfil da biblioteca (ex: "programador", "pesquisador", "revisor-codigo" — liste com listAgentProfiles). Compoe a soul automaticamente.'),
+      personality: z.string().optional().describe('Com profileId: funcao especifica deste agente em 1-2 frases. Sem profileId: personalidade completa (vira o soul.md, max ~150 palavras).'),
       description: z.string().optional().describe('Descricao de uma linha (aparece nas listagens)'),
       team: z.string().optional().describe('Equipe do agente (ex: "roteiristas"). Se omitido, herda a sua.'),
       role: z.enum(['manager', 'worker']).optional().describe('Papel: "manager" lidera uma equipe (so a principal pode criar managers). Padrao: worker.'),
@@ -25,7 +32,7 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
       fastMode: z.boolean().optional().describe('true = agente rapido sem thinking mode (DeepSeek): responde muito mais rapido e custa menos. Recomendado para workers de execucao direta; deixe false so para tarefas que exigem raciocinio profundo.'),
       initialMemory: z.string().optional().describe('Memoria inicial para condicionar o agente (contexto do projeto, instrucoes)'),
     }),
-    execute: async ({ name, personality, description, team, role, temporary, fastMode, initialMemory }) => {
+    execute: async ({ name, profileId, personality, description, team, role, temporary, fastMode, initialMemory }) => {
       try {
         const creatorCfg = getConfig().agents[creatorId];
         const creatorRole = creatorCfg?.role ?? 'worker';
@@ -38,9 +45,28 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
           finalRole = 'manager';
         }
 
+        const finalTeam = team ?? creatorCfg?.team ?? null;
+        const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+
         let customSoul: string | undefined;
-        if (personality) {
+        if (profileId) {
+          // Composicao deterministica: perfil da biblioteca + funcao curta
+          customSoul = composeSoul({
+            profileId,
+            agentName: displayName,
+            team: finalTeam,
+            temporary,
+            mission: personality,
+          });
+        } else if (personality) {
+          const sizeError = validateSoulText(personality);
+          if (sizeError) return { error: sizeError };
           customSoul = `# Personalidade\n\n${personality}\n\n## Comportamento\n- Seja objetivo e execute o que seu superior pedir, reportando resultados reais\n- Use suas ferramentas de verdade — nunca invente resultados\n- Salve aprendizados na sua memoria e melhore sua soul quando perceber necessidade\n`;
+        }
+
+        if (initialMemory) {
+          const memError = validateSeedMemory(initialMemory);
+          if (memError) return { error: memError };
         }
 
         const agent = registry.createAgent(name, {
@@ -48,9 +74,10 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
           description,
           role: finalRole,
           parent: creatorId,
-          team: team ?? creatorCfg?.team ?? null,
+          team: finalTeam,
           temporary,
           thinking: fastMode ? false : undefined,
+          profile: profileId ?? null,
         });
 
         if (initialMemory) {
@@ -62,9 +89,10 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
         }
         return {
           success: true,
-          message: `Agente "${agent.name}" (${agent.id}) criado como ${finalRole}, subordinado a ${creatorId}.`,
+          message: `Agente "${agent.name}" (${agent.id}) criado como ${finalRole}, subordinado a ${creatorId}${profileId ? `, com perfil "${profileId}"` : ''}.`,
           id: agent.id,
-          team: team ?? creatorCfg?.team ?? null,
+          team: finalTeam,
+          profile: profileId ?? null,
         };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'Erro ao criar agente' };
@@ -74,21 +102,62 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
 
   const configureAgentTool = tool({
     description:
-      'Reescrever a personalidade (soul.md) de um agente SUBORDINADO a voce, para condiciona-lo melhor ao papel.',
+      'Reescrever a personalidade (soul.md) de um agente SUBORDINADO a voce. Passe profileId para compor a partir de um perfil da biblioteca (com "mission" opcional), OU newSoul com o texto completo (conciso, max ~150 palavras).',
     inputSchema: z.object({
       agentId: z.string().describe('ID do agente subordinado'),
-      newSoul: z.string().describe('Novo conteudo completo do soul.md (conciso, max ~150 palavras)'),
+      profileId: z.string().optional().describe('Perfil da biblioteca para compor a soul (veja listAgentProfiles)'),
+      mission: z.string().optional().describe('Com profileId: funcao especifica em 1-2 frases'),
+      newSoul: z.string().optional().describe('Sem profileId: novo conteudo completo do soul.md'),
     }),
-    execute: async ({ agentId, newSoul }) => {
+    execute: async ({ agentId, profileId, mission, newSoul }) => {
       if (!registry.agentExists(agentId)) {
         return { error: `Agente "${agentId}" nao encontrado.` };
       }
       if (!registry.isSuperiorOf(creatorId, agentId)) {
         return { error: 'Voce so pode configurar agentes abaixo de voce na hierarquia.' };
       }
-      fs.writeFileSync(path.join(getAgentDir(agentId), 'soul.md'), newSoul, 'utf-8');
-      return { success: true, message: `Soul de "${agentId}" atualizado.` };
+
+      const cfg = getConfig().agents[agentId];
+      let soul: string;
+      try {
+        if (profileId) {
+          soul = composeSoul({
+            profileId,
+            agentName: cfg?.name ?? agentId,
+            team: cfg?.team ?? null,
+            temporary: cfg?.temporary,
+            mission,
+          });
+        } else if (newSoul) {
+          const sizeError = validateSoulText(newSoul);
+          if (sizeError) return { error: sizeError };
+          soul = newSoul;
+        } else {
+          return { error: 'Informe profileId (com mission opcional) ou newSoul.' };
+        }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'Erro ao compor soul' };
+      }
+
+      fs.writeFileSync(path.join(getAgentDir(agentId), 'soul.md'), soul, 'utf-8');
+      if (cfg) {
+        updateAgentInConfig(agentId, { ...cfg, profile: profileId ?? null });
+      }
+      return {
+        success: true,
+        message: `Soul de "${agentId}" atualizado${profileId ? ` com o perfil "${profileId}"` : ''}.`,
+      };
     },
+  });
+
+  const listAgentProfilesTool = tool({
+    description:
+      'Listar os perfis da biblioteca disponiveis para createAgent/configureAgent (profileId), com o resumo de cada papel.',
+    inputSchema: z.object({}),
+    execute: async () => ({
+      perfis: listProfiles().map(p => ({ id: p.id, papel: p.title, resumo: p.summary })),
+      dica: 'Use profileId no createAgent e descreva a funcao especifica em "personality" (1-2 frases). Manual completo de cada perfil via readFile no arquivo em skills/system-prompter/perfis/.',
+    }),
   });
 
   const seedAgentMemoryTool = tool({
@@ -105,6 +174,8 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
       if (!registry.isSuperiorOf(creatorId, agentId)) {
         return { error: 'Voce so pode configurar agentes abaixo de voce na hierarquia.' };
       }
+      const memError = validateSeedMemory(memory);
+      if (memError) return { error: memError };
       writeMemory(agentId, `# Memoria\n\n## Contexto do Trabalho\n${memory}\n\n## Notas Importantes\n- (Nada registrado ainda)\n`);
       return { success: true, message: `Memoria de "${agentId}" semeada.` };
     },
@@ -148,6 +219,7 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
     configureAgent: configureAgentTool,
     seedAgentMemory: seedAgentMemoryTool,
     listSubordinates: listSubordinatesTool,
+    listAgentProfiles: listAgentProfilesTool,
     deleteAgent: deleteAgentTool,
   };
 }

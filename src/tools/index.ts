@@ -89,6 +89,7 @@ export function buildToolSet(
     configureAgent: agentMgmtTools.configureAgent,
     seedAgentMemory: agentMgmtTools.seedAgentMemory,
     listSubordinates: agentMgmtTools.listSubordinates,
+    listAgentProfiles: agentMgmtTools.listAgentProfiles,
     deleteAgent: agentMgmtTools.deleteAgent,
     listAgents: listAgentsTool,
 

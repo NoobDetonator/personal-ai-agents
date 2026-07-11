@@ -14,6 +14,8 @@ export interface AgentConfig {
   temporary?: boolean;
   /** false = modo rapido (DeepSeek sem thinking); ausente/true = padrao */
   thinking?: boolean;
+  /** Perfil da biblioteca (skills/system-prompter/perfis) usado para compor a soul */
+  profile?: string | null;
 }
 
 export interface AppConfig {
@@ -100,6 +102,7 @@ const AGENT_SCHEMA = z.object({
   team: z.string().nullable(),
   temporary: z.boolean().optional(),
   thinking: z.boolean().optional(),
+  profile: z.string().nullable().optional(),
 });
 
 export const CONFIG_SCHEMA = z.object({

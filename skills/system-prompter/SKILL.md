@@ -24,7 +24,11 @@ A pasta desta skill contem uma biblioteca de perfis completos em `perfis/` — m
 
 ## Receita
 
-1. Escolha o perfil na tabela abaixo e leia com readFile.
+**Caminho padrao (automatico):** passe `profileId` no createAgent (liste com listAgentProfiles) e descreva a funcao especifica em `personality` (1-2 frases). A soul e composta automaticamente a partir do perfil, com tamanho validado e origem registrada. Semeie `initialMemory` normalmente (passo 3).
+
+**Caminho manual** (papel novo que nao existe na biblioteca):
+
+1. Escolha o perfil mais proximo na tabela abaixo e leia com readFile.
 2. Escreva a soul condensada neste formato:
 
 ```markdown

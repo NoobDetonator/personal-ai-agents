@@ -18,6 +18,8 @@ export interface CreateAgentOptions {
   thinking?: boolean;
   provider?: string | null;
   model?: string | null;
+  /** Perfil da biblioteca usado para compor a soul (registrado na config) */
+  profile?: string | null;
 }
 
 export function initRegistry(): void {
@@ -150,6 +152,7 @@ export function createAgent(agentId: string, opts: CreateAgentOptions = {}): Age
     team: opts.team ?? null,
     ...(opts.temporary ? { temporary: true } : {}),
     ...(opts.thinking === false ? { thinking: false } : {}),
+    ...(opts.profile ? { profile: opts.profile } : {}),
   });
 
   const agent = new Agent(id);
