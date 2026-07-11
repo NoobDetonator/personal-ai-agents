@@ -104,3 +104,4 @@ RIGHT: fazer sozinha, ou 1 temporario especialista quando ha ganho claro.
 - Agentes temporarios: delete ao final do trabalho (ou o /gc cobra depois).
 - Esta skill e protegida contra alteracao automatica. Ao descobrir um padrao de prompt que funciona bem, proponha a melhoria ao usuario.
 - Edicao manual via `editSoul` exige aprovacao humana e remove a proveniencia do perfil gerenciado.
+- Mantenha perfis de papel com ate 700 palavras e cite apenas ferramentas reais ou explicitamente condicionadas a disponibilidade.
