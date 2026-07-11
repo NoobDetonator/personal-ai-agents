@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { getSkillsDir, parseFrontmatter } from '../skills/loader.js';
 
 /**
@@ -10,8 +11,8 @@ import { getSkillsDir, parseFrontmatter } from '../skills/loader.js';
  * de seguir o manual.
  */
 
-export const MAX_SOUL_WORDS = 220;
-export const MAX_MISSION_WORDS = 80;
+export const MAX_SOUL_WORDS = 150;
+export const MAX_MISSION_WORDS = 30;
 export const MAX_SEED_MEMORY_CHARS = 4000;
 
 const PROFILES_SKILL_ID = 'system-prompter';
@@ -24,6 +25,7 @@ export interface ProfileInfo {
   title: string;   // H1 do perfil
   summary: string; // primeiro paragrafo apos o H1 (essencia do papel)
   file: string;    // caminho relativo, legivel via readFile
+  revision: string; // hash curto do conteudo usado para compor a soul
 }
 
 export function getProfilesDir(): string {
@@ -76,7 +78,8 @@ export function extractProfileInfo(markdown: string, id: string): ProfileInfo {
     summary = cut.slice(0, Math.max(cut.lastIndexOf('. ') + 1, cut.lastIndexOf(' '))).trim();
   }
 
-  return { id, title, summary, file: `skills/${PROFILES_SKILL_ID}/perfis/${id}.md` };
+  const revision = createHash('sha256').update(markdown, 'utf8').digest('hex').slice(0, 12);
+  return { id, title, summary, file: `skills/${PROFILES_SKILL_ID}/perfis/${id}.md`, revision };
 }
 
 export function listProfiles(): ProfileInfo[] {
@@ -134,7 +137,7 @@ export function composeSoul(opts: ComposeSoulOptions): string {
   const equipe = opts.team ? ` da equipe "${opts.team}"` : '';
   const missao = opts.mission ? `\nSua funcao neste trabalho: ${opts.mission.trim()}\n` : '';
 
-  return `# Personalidade
+  const soul = `# Personalidade
 
 Voce e ${opts.agentName}, agente ${vinculo}${equipe}, no papel de ${profile.title}.
 
@@ -145,6 +148,28 @@ ${missao}
 - Use suas ferramentas de verdade e reporte apenas resultados reais e verificados
 - Reporte ao superior no formato pedido; diga claramente o que nao conseguiu concluir
 `;
+
+  const sizeError = validateSoulText(soul);
+  if (sizeError) {
+    throw new Error(`A soul composta para o perfil "${profile.id}" ficou invalida: ${sizeError}`);
+  }
+  return soul;
+}
+
+/** Monta e valida o caminho manual com o mesmo limite aplicado ao arquivo final. */
+export function composeManualSoul(personality: string): string {
+  const soul = `# Personalidade
+
+${personality.trim()}
+
+## Comportamento
+- Seja objetivo e execute o que seu superior pedir, reportando resultados reais
+- Use suas ferramentas de verdade; nunca invente resultados
+- Salve aprendizados na sua memoria; alteracoes da soul exigem aprovacao humana
+`;
+  const sizeError = validateSoulText(soul);
+  if (sizeError) throw new Error(sizeError);
+  return soul;
 }
 
 /**

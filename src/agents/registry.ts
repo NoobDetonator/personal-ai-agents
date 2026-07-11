@@ -2,6 +2,7 @@ import { getConfig, updateAgentInConfig, removeAgentFromConfig } from '../config
 import { createAgentFiles, deleteAgentFiles, discoverAgents } from './personality.js';
 import type { AgentConfig, AgentRole } from '../config/defaults.js';
 import { Agent } from './agent.js';
+import { validateSoulText } from './prompt-composer.js';
 
 const agents = new Map<string, Agent>();
 
@@ -20,6 +21,7 @@ export interface CreateAgentOptions {
   model?: string | null;
   /** Perfil da biblioteca usado para compor a soul (registrado na config) */
   profile?: string | null;
+  profileRevision?: string | null;
 }
 
 export function initRegistry(): void {
@@ -139,6 +141,13 @@ export function createAgent(agentId: string, opts: CreateAgentOptions = {}): Age
     throw new Error(`Agente "${id}" ja existe.`);
   }
 
+  if (opts.soul) {
+    const sizeError = validateSoulText(opts.soul);
+    if (sizeError) {
+      throw new Error(sizeError);
+    }
+  }
+
   createAgentFiles(id, opts.soul);
 
   updateAgentInConfig(id, {
@@ -153,6 +162,7 @@ export function createAgent(agentId: string, opts: CreateAgentOptions = {}): Age
     ...(opts.temporary ? { temporary: true } : {}),
     ...(opts.thinking === false ? { thinking: false } : {}),
     ...(opts.profile ? { profile: opts.profile } : {}),
+    ...(opts.profileRevision ? { profileRevision: opts.profileRevision } : {}),
   });
 
   const agent = new Agent(id);

@@ -59,6 +59,14 @@ export const createSkillTool = tool({
     instructions: z.string().describe('Corpo da skill em Markdown: passos, exemplos, cuidados'),
   }),
   execute: async ({ id, description, instructions }) => {
+    const confirmation = await askConfirmation(
+      `A agente principal quer criar a skill persistente "${id}". Permitir?`,
+      { allowAlways: false },
+    );
+    if (confirmation.answer !== 'yes') {
+      return { error: 'Criacao da skill negada pelo usuario.' };
+    }
+
     try {
       const meta = createSkillFiles(id, id, description, instructions);
       return { success: true, id: meta.id, path: meta.filePath };

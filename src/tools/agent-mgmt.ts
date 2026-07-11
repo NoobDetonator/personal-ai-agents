@@ -8,6 +8,8 @@ import { getAgentDir, writeMemory, readSoul } from '../agents/personality.js';
 import { getConfig, updateAgentInConfig } from '../config/loader.js';
 import {
   composeSoul,
+  composeManualSoul,
+  getProfile,
   listProfiles,
   validateSoulText,
   validateSeedMemory,
@@ -20,11 +22,11 @@ import {
 export function createAgentManagementTools(creatorId: string, onAgentCreated?: (agent: Agent) => void) {
   const createAgentTool = tool({
     description:
-      'Criar um novo agente subordinado a voce. PREFIRA profileId (veja listAgentProfiles): a soul e composta automaticamente a partir do perfil, e "personality" vira a funcao especifica (1-2 frases). Sem profileId, "personality" e a soul completa — CONCISA (max ~150 palavras). Use team para agrupar agentes do mesmo projeto.',
+      'Criar um novo agente subordinado a voce. PREFIRA profileId (veja listAgentProfiles): a soul e composta automaticamente e personality vira a missao especifica (max 30 palavras). Sem profileId, personality e condensada em uma soul final de max 150 palavras.',
     inputSchema: z.object({
       name: z.string().describe('Nome do agente (ex: "roteirista1"). Minusculas, sem espacos.'),
       profileId: z.string().optional().describe('Perfil da biblioteca (ex: "programador", "pesquisador", "revisor-codigo" — liste com listAgentProfiles). Compoe a soul automaticamente.'),
-      personality: z.string().optional().describe('Com profileId: funcao especifica deste agente em 1-2 frases. Sem profileId: personalidade completa (vira o soul.md, max ~150 palavras).'),
+      personality: z.string().optional().describe('Com profileId: missao especifica em max 30 palavras. Sem profileId: personalidade condensada na soul final (max 150 palavras).'),
       description: z.string().optional().describe('Descricao de uma linha (aparece nas listagens)'),
       team: z.string().optional().describe('Equipe do agente (ex: "roteiristas"). Se omitido, herda a sua.'),
       role: z.enum(['manager', 'worker']).optional().describe('Papel: "manager" lidera uma equipe (so a principal pode criar managers). Padrao: worker.'),
@@ -49,19 +51,22 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
         const displayName = name.charAt(0).toUpperCase() + name.slice(1);
 
         let customSoul: string | undefined;
+        let appliedProfile: ReturnType<typeof getProfile>;
         if (profileId) {
+          appliedProfile = getProfile(profileId);
+          if (!appliedProfile) {
+            throw new Error(`Perfil "${profileId}" nao existe. Disponiveis: ${listProfiles().map(p => p.id).join(', ')}`);
+          }
           // Composicao deterministica: perfil da biblioteca + funcao curta
           customSoul = composeSoul({
-            profileId,
+            profileId: appliedProfile.id,
             agentName: displayName,
             team: finalTeam,
             temporary,
             mission: personality,
           });
         } else if (personality) {
-          const sizeError = validateSoulText(personality);
-          if (sizeError) return { error: sizeError };
-          customSoul = `# Personalidade\n\n${personality}\n\n## Comportamento\n- Seja objetivo e execute o que seu superior pedir, reportando resultados reais\n- Use suas ferramentas de verdade — nunca invente resultados\n- Salve aprendizados na sua memoria e melhore sua soul quando perceber necessidade\n`;
+          customSoul = composeManualSoul(personality);
         }
 
         if (initialMemory) {
@@ -77,7 +82,8 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
           team: finalTeam,
           temporary,
           thinking: fastMode ? false : undefined,
-          profile: profileId ?? null,
+          profile: appliedProfile?.id ?? null,
+          profileRevision: appliedProfile?.revision ?? null,
         });
 
         if (initialMemory) {
@@ -89,10 +95,11 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
         }
         return {
           success: true,
-          message: `Agente "${agent.name}" (${agent.id}) criado como ${finalRole}, subordinado a ${creatorId}${profileId ? `, com perfil "${profileId}"` : ''}.`,
+          message: `Agente "${agent.name}" (${agent.id}) criado como ${finalRole}, subordinado a ${creatorId}${appliedProfile ? `, com perfil "${appliedProfile.id}"` : ''}.`,
           id: agent.id,
           team: finalTeam,
-          profile: profileId ?? null,
+          profile: appliedProfile?.id ?? null,
+          profileRevision: appliedProfile?.revision ?? null,
         };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'Erro ao criar agente' };
@@ -106,7 +113,7 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
     inputSchema: z.object({
       agentId: z.string().describe('ID do agente subordinado'),
       profileId: z.string().optional().describe('Perfil da biblioteca para compor a soul (veja listAgentProfiles)'),
-      mission: z.string().optional().describe('Com profileId: funcao especifica em 1-2 frases'),
+      mission: z.string().optional().describe('Com profileId: missao especifica em max 30 palavras'),
       newSoul: z.string().optional().describe('Sem profileId: novo conteudo completo do soul.md'),
     }),
     execute: async ({ agentId, profileId, mission, newSoul }) => {
@@ -116,13 +123,24 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
       if (!registry.isSuperiorOf(creatorId, agentId)) {
         return { error: 'Voce so pode configurar agentes abaixo de voce na hierarquia.' };
       }
+      if (profileId && newSoul) {
+        return { error: 'Informe apenas profileId ou newSoul, nunca os dois.' };
+      }
+      if (!profileId && mission) {
+        return { error: 'mission so pode ser usada junto com profileId.' };
+      }
 
       const cfg = getConfig().agents[agentId];
       let soul: string;
+      let appliedProfile: ReturnType<typeof getProfile>;
       try {
         if (profileId) {
+          appliedProfile = getProfile(profileId);
+          if (!appliedProfile) {
+            throw new Error(`Perfil "${profileId}" nao existe. Disponiveis: ${listProfiles().map(p => p.id).join(', ')}`);
+          }
           soul = composeSoul({
-            profileId,
+            profileId: appliedProfile.id,
             agentName: cfg?.name ?? agentId,
             team: cfg?.team ?? null,
             temporary: cfg?.temporary,
@@ -141,11 +159,15 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
 
       fs.writeFileSync(path.join(getAgentDir(agentId), 'soul.md'), soul, 'utf-8');
       if (cfg) {
-        updateAgentInConfig(agentId, { ...cfg, profile: profileId ?? null });
+        updateAgentInConfig(agentId, {
+          ...cfg,
+          profile: appliedProfile?.id ?? null,
+          profileRevision: appliedProfile?.revision ?? null,
+        });
       }
       return {
         success: true,
-        message: `Soul de "${agentId}" atualizado${profileId ? ` com o perfil "${profileId}"` : ''}.`,
+        message: `Soul de "${agentId}" atualizado${appliedProfile ? ` com o perfil "${appliedProfile.id}"` : ''}.`,
       };
     },
   });
@@ -155,8 +177,8 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
       'Listar os perfis da biblioteca disponiveis para createAgent/configureAgent (profileId), com o resumo de cada papel.',
     inputSchema: z.object({}),
     execute: async () => ({
-      perfis: listProfiles().map(p => ({ id: p.id, papel: p.title, resumo: p.summary })),
-      dica: 'Use profileId no createAgent e descreva a funcao especifica em "personality" (1-2 frases). Manual completo de cada perfil via readFile no arquivo em skills/system-prompter/perfis/.',
+      perfis: listProfiles().map(p => ({ id: p.id, revisao: p.revision, papel: p.title, resumo: p.summary })),
+      dica: 'Use profileId no createAgent e descreva a missao em personality (max 30 palavras). Manual completo de cada perfil via readFile em skills/system-prompter/perfis/.',
     }),
   });
 

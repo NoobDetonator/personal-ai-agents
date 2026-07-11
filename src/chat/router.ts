@@ -76,13 +76,14 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
   // Transient system hints (not persisted in history)
   const hints: string[] = [];
 
+  let recalledContext: string | undefined;
   // Recall seletivo de memorias profundas (side-query barata, fail-open)
   if (config.memory.recall) {
     const { recallRelevantMemories } = await import('../agents/recall.js');
     const recalled = await recallRelevantMemories(ctx.activeAgent.id, trimmed);
     if (recalled) {
       renderer.renderSystemMessage('(memorias relevantes recuperadas)');
-      hints.push(recalled);
+      recalledContext = recalled;
     }
   }
 
@@ -113,7 +114,10 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
     };
 
     renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
-    let result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, { systemHint });
+    let result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
+      systemHint,
+      contextData: recalledContext,
+    });
     renderer.renderStreamEnd();
 
     // Auto-continuacao: turno cortado no meio do trabalho (limite de passos/
@@ -132,7 +136,10 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
       saveDirectMessage(ctx.conversationId, 'user', CONTINUE_HINT, null);
 
       renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
-      result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, { systemHint });
+      result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
+        systemHint,
+        contextData: recalledContext,
+      });
       renderer.renderStreamEnd();
     }
 
@@ -143,6 +150,7 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
       renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
       result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
         systemHint: [systemHint, ANTI_FABRICATION_RETRY_HINT].filter(Boolean).join('\n\n'),
+        contextData: recalledContext,
       });
       renderer.renderStreamEnd();
 

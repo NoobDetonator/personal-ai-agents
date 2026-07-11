@@ -16,6 +16,10 @@ import { getMcpTools } from '../mcp/manager.js';
 import { getConfig } from '../config/loader.js';
 import type { Agent } from '../agents/agent.js';
 
+export function canAuthorSkills(role: string): boolean {
+  return role === 'principal';
+}
+
 export function buildToolSet(
   agentId: string,
   dispatchFn: (from: string, to: string, content: string) => Promise<string>,
@@ -27,23 +31,24 @@ export function buildToolSet(
   const agentMgmtTools = createAgentManagementTools(agentId, onAgentCreated);
   const conversationMgmtTools = createConversationMgmtTools(agentId);
 
-  // Leaders (principal and managers) get the company board + delegation tools.
-  // Skill authoring is also leader-only: skills condition every future agent,
-  // so workers (often temporary, fed with external content) cannot write them.
+  // Leaders get the company board + delegation tools. Skill authoring is more
+  // sensitive: only the principal can create/update instructions persistentes.
   const role = getConfig().agents[agentId]?.role ?? 'worker';
   const isLeader = role === 'principal' || role === 'manager';
   const leaderTools = isLeader
     ? {
         ...createTaskTools(agentId),
         ...createGroupTools(agentId),
-        createSkill: createSkillTool,
-        updateSkill: updateSkillTool,
       }
+    : {};
+  const skillAuthoringTools: ToolSet = canAuthorSkills(role)
+    ? { createSkill: createSkillTool, updateSkill: updateSkillTool }
     : {};
 
   return {
     ...getMcpTools(),
     ...leaderTools,
+    ...skillAuthoringTools,
 
     // File operations
     readFile: readFileTool,

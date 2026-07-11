@@ -43,6 +43,7 @@ test('extrai titulo e resumo pulando blockquote de integracao', () => {
   assert.equal(profile.title, 'Testador');
   assert.ok(profile.summary.includes('testador rigoroso'));
   assert.ok(!profile.summary.includes('Integração Aria'));
+  assert.match(profile.revision, /^[a-f0-9]{12}$/);
 });
 
 test('composeSoul gera soul curta com identidade, resumo, missao e manual', () => {
@@ -83,6 +84,15 @@ test('validateSoulText rejeita soul manual acima do limite', () => {
   assert.equal(composer.validateSoulText('curta e boa'), null);
 });
 
+test('composeManualSoul valida o arquivo final, incluindo o boilerplate', () => {
+  const quaseNoLimite = Array(composer.MAX_SOUL_WORDS - 5).fill('palavra').join(' ');
+  assert.throws(() => composer.composeManualSoul(quaseNoLimite), /excede o limite/);
+
+  const curta = composer.composeManualSoul('Voce revisa codigo e reporta bugs com evidencia.');
+  assert.ok(curta.includes('## Comportamento'));
+  assert.ok(composer.countWords(curta) <= composer.MAX_SOUL_WORDS);
+});
+
 test('validateSeedMemory rejeita memoria inicial gigante', () => {
   assert.match(composer.validateSeedMemory('x'.repeat(composer.MAX_SEED_MEMORY_CHARS + 1)) ?? '', /excede o limite/);
   assert.equal(composer.validateSeedMemory('contexto normal'), null);
@@ -96,9 +106,20 @@ test('todos os perfis reais do repositorio produzem titulo e resumo utilizaveis'
   assert.ok(roleFiles.length >= 15, 'biblioteca real deveria ter os perfis de papel');
   for (const file of roleFiles) {
     const markdown = fs.readFileSync(path.join(repoPerfis, file), 'utf-8');
+    fs.copyFileSync(path.join(repoPerfis, file), path.join(composer.getProfilesDir(), file));
     const info = composer.extractProfileInfo(markdown, file.replace(/\.md$/, ''));
     assert.ok(info.title.length > 2, `${file}: titulo vazio`);
     assert.ok(info.summary.length > 40, `${file}: resumo curto demais ("${info.summary}")`);
     assert.ok(!info.summary.includes('Integração Aria'), `${file}: resumo vazou blockquote`);
+    const soul = composer.composeSoul({
+      profileId: info.id,
+      agentName: 'Teste',
+      mission: Array(composer.MAX_MISSION_WORDS).fill('missao').join(' '),
+    });
+    assert.ok(
+      composer.countWords(soul) <= composer.MAX_SOUL_WORDS,
+      `${file}: soul composta excedeu o limite`,
+    );
+
   }
 });

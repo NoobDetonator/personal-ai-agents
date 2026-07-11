@@ -24,7 +24,7 @@ A pasta desta skill contem uma biblioteca de perfis completos em `perfis/` — m
 
 ## Receita
 
-**Caminho padrao (automatico):** passe `profileId` no createAgent (liste com listAgentProfiles) e descreva a funcao especifica em `personality` (1-2 frases). A soul e composta automaticamente a partir do perfil, com tamanho validado e origem registrada. Semeie `initialMemory` normalmente (passo 3).
+**Caminho padrao (automatico):** passe `profileId` no createAgent (liste com listAgentProfiles) e descreva a funcao especifica em `personality` (max 30 palavras). A soul final e validada em 150 palavras e registra id + revisao do perfil. Semeie `initialMemory` normalmente (passo 3).
 
 **Caminho manual** (papel novo que nao existe na biblioteca):
 
@@ -103,3 +103,4 @@ RIGHT: fazer sozinha, ou 1 temporario especialista quando ha ganho claro.
 - As Regras de Operacao do sistema (anti-fabricacao, verificar antes de reportar, pt-BR) ja entram automaticamente em todo agente — nao as repita nem as contradiga na soul.
 - Agentes temporarios: delete ao final do trabalho (ou o /gc cobra depois).
 - Esta skill e protegida contra alteracao automatica. Ao descobrir um padrao de prompt que funciona bem, proponha a melhoria ao usuario.
+- Edicao manual via `editSoul` exige aprovacao humana e remove a proveniencia do perfil gerenciado.

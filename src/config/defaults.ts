@@ -16,6 +16,8 @@ export interface AgentConfig {
   thinking?: boolean;
   /** Perfil da biblioteca (skills/system-prompter/perfis) usado para compor a soul */
   profile?: string | null;
+  /** Hash curto do conteudo exato do perfil usado na composicao */
+  profileRevision?: string | null;
 }
 
 export interface AppConfig {
@@ -103,6 +105,7 @@ const AGENT_SCHEMA = z.object({
   temporary: z.boolean().optional(),
   thinking: z.boolean().optional(),
   profile: z.string().nullable().optional(),
+  profileRevision: z.string().nullable().optional(),
 });
 
 export const CONFIG_SCHEMA = z.object({

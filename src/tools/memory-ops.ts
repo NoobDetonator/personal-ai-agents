@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { readMemory, appendToMemorySection, readSoul, appendDailyNote, readDailyNote, saveDeepMemoryFile, readDeepMemoryFile } from '../agents/personality.js';
 import { summarizeMemoryIfNeeded } from '../agents/memory-summarizer.js';
 import { appendToUserProfile, PROFILE_SECTIONS } from '../agents/user-profile.js';
-import { getConfig, updateConfig } from '../config/loader.js';
+import { getConfig, updateAgentInConfig, updateConfig } from '../config/loader.js';
+import { validateSoulText } from '../agents/prompt-composer.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 export function createMemoryTools(agentId: string) {
   const readMemoryTool = tool({
@@ -40,16 +42,31 @@ export function createMemoryTools(agentId: string) {
   });
 
   const editSoulTool = tool({
-    description: 'Editar seu arquivo de personalidade. Use com cuidado - isso muda quem voce e!',
+    description: 'Propor uma edicao manual da propria soul. Exige aprovacao humana, respeita o limite final e remove a proveniencia de perfil.',
     inputSchema: z.object({
       newContent: z.string().describe('Novo conteudo completo do arquivo de personalidade (soul.md)'),
     }),
     execute: async ({ newContent }) => {
+      const sizeError = validateSoulText(newContent);
+      if (sizeError) return { error: sizeError };
+
+      const confirmation = await askConfirmation(
+        `O agente "${agentId}" quer reescrever a propria soul e remover o perfil gerenciado. Permitir?`,
+        { allowAlways: false },
+      );
+      if (confirmation.answer !== 'yes') {
+        return { error: 'Edicao da soul negada pelo usuario.' };
+      }
+
       const { writeFileSync } = await import('node:fs');
       const { join, resolve } = await import('node:path');
       const soulPath = resolve(join(process.cwd(), 'agents', agentId, 'soul.md'));
       writeFileSync(soulPath, newContent, 'utf-8');
-      return { success: true, message: 'Personalidade atualizada!' };
+      const cfg = getConfig().agents[agentId];
+      if (cfg) {
+        updateAgentInConfig(agentId, { ...cfg, profile: null, profileRevision: null });
+      }
+      return { success: true, message: 'Personalidade atualizada manualmente; perfil gerenciado removido.' };
     },
   });
 

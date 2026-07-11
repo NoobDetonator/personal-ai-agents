@@ -1,5 +1,7 @@
 # Skills embarcadas
 
-As skills de terceiros que existiam neste diretório foram removidas. Hoje ele contém apenas skills próprias do projeto (`criando-skills`) e pode receber skills criadas durante o uso pelos agentes.
+O projeto inclui duas skills internas protegidas: `criando-skills` e `system-prompter`. Skills com `protected: true` não podem ser alteradas por agentes.
 
-Uma evolução futura deve separar explicitamente skills embutidas e mantidas pelo projeto das skills criadas ou instaladas por cada usuário, por exemplo usando um diretório local configurável e ignorado pelo Git.
+Somente a agente principal recebe `createSkill` e `updateSkill`. Criar ou atualizar uma skill persistente exige confirmação humana sem permissão permanente. Workers e managers podem listar e usar skills, mas não criá-las nem reescrevê-las.
+
+O `system-prompter` fornece perfis para composição determinística de souls. Agentes criados com `profileId` registram o id e a revisão do perfil na configuração. Skills criadas durante o uso continuam sendo estado local que deve ser revisado antes de qualquer commit.

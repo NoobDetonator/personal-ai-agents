@@ -15,6 +15,7 @@ import {
   forkConversation,
 } from '../db/conversation-helpers.js';
 import { listSkillMetas, readSkillContent, getSkillsDir } from '../skills/loader.js';
+import { composeSoul, getProfile, listProfiles } from '../agents/prompt-composer.js';
 
 export interface Command {
   name: string;
@@ -88,18 +89,35 @@ export const commands: Command[] = [
   {
     name: '/novo',
     aliases: ['/new', '/criar'],
-    description: 'Cria uma nova IA',
-    usage: '/novo <nome>',
+    description: 'Cria uma nova IA, opcionalmente com perfil gerenciado',
+    usage: '/novo <nome> [profileId]',
     execute: async (args, ctx) => {
       if (args.length === 0) {
-        renderer.renderError('Informe o nome da nova IA. Ex: /novo luna');
+        renderer.renderError('Informe o nome da nova IA. Ex: /novo luna programador');
         return;
       }
       const name = args[0];
+      const requestedProfile = args[1];
       try {
-        const agent = registry.createAgent(name);
+        const profile = requestedProfile ? getProfile(requestedProfile) : undefined;
+        if (requestedProfile && !profile) {
+          renderer.renderError(
+            `Perfil "${requestedProfile}" nao existe. Disponiveis: ${listProfiles().map(p => p.id).join(', ')}`,
+          );
+          return;
+        }
+        const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+        const agent = registry.createAgent(name, profile
+          ? {
+              soul: composeSoul({ profileId: profile.id, agentName: displayName }),
+              profile: profile.id,
+              profileRevision: profile.revision,
+            }
+          : {});
         ctx.buildToolsForAgent(agent);
-        renderer.renderSuccess(`Agente "${agent.name}" criado! Use /agente ${agent.id} para conversar.`);
+        renderer.renderSuccess(
+          `Agente "${agent.name}" criado${profile ? ` com perfil "${profile.id}"` : ''}! Use /agente ${agent.id} para conversar.`,
+        );
       } catch (error) {
         renderer.renderError(error instanceof Error ? error.message : 'Erro ao criar agente');
       }

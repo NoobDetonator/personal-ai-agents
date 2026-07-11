@@ -2,10 +2,14 @@
 
 ## Aria e agentes locais
 
-`agents/aria/soul.md` é a única soul incluída na instalação padrão. O registro procura subdiretórios em `agents/`; cada diretório encontrado é registrado na configuração local. Assim, agentes criados pela Aria e suas alterações são dados de execução e permanecem ignorados pelo Git.
+`agents/aria/soul.md` é a única soul incluída na instalação padrão. Agentes criados durante o uso, suas souls, memórias, notas diárias e memórias profundas são estado local ignorado pelo Git.
 
-Cada agente pode ter `soul.md`, `memory.md`, notas diárias em `memory/` e memórias profundas em `memories/`. O perfil compartilhado do usuário fica em `USER.md`. Todos esses arquivos são locais e não devem ser adicionados ao repositório.
+Perfil do usuário, memória e notas são enviados ao modelo como dados em uma mensagem de usuário separada. Apenas regras fixas e souls validadas permanecem no system prompt. Conteúdo dinâmico não pode alterar regras, ferramentas ou permissões.
+
+## Perfis e souls
+
+`createAgent`, `configureAgent` e o comando `/novo` aceitam `profileId`. O compositor gera uma soul de até 150 palavras, registra o id e a revisão do perfil e limita a missão a 30 palavras. Edição manual da própria soul exige confirmação humana e remove a proveniência do perfil.
 
 ## Skills
 
-A aplicação descobre diretórios de primeiro nível em `skills/` que contenham `SKILL.md`. O diretório pode receber skills criadas durante o uso, mas o controle de versão só deve incluir mudanças revisadas intencionalmente. Veja `skills/README.md`.
+A aplicação descobre diretórios de primeiro nível em `skills/` que contenham `SKILL.md`. Skills internas usam `protected: true`. Somente a agente principal pode criar ou atualizar skills persistentes, sempre com confirmação humana. Consulte `skills/README.md` para as regras de governança.
