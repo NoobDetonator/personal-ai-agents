@@ -9,6 +9,7 @@ import { getDb } from '../db/connection.js';
 import { askConfirmation } from '../chat/confirm.js';
 
 const ROOT_DIR = process.cwd();
+const PHYSICAL_ROOT_DIR = fs.realpathSync.native(ROOT_DIR);
 
 // Characters that allow chaining/redirecting — commands containing them never
 // bypass confirmation via the allowlist
@@ -21,6 +22,22 @@ function isAllowlisted(command: string, allowlist: string[]): boolean {
     const p = prefix.trim();
     return p.length > 0 && (trimmed === p || trimmed.startsWith(p + ' '));
   });
+}
+
+function canonicalizePath(targetPath: string): string | null {
+  let existing = path.resolve(targetPath);
+  const missingSegments: string[] = [];
+  try {
+    while (!fs.existsSync(existing)) {
+      const parent = path.dirname(existing);
+      if (parent === existing) return null;
+      missingSegments.unshift(path.basename(existing));
+      existing = parent;
+    }
+    return path.resolve(fs.realpathSync.native(existing), ...missingSegments);
+  } catch {
+    return null;
+  }
 }
 
 function truncate(text: string, max: number): string {
@@ -106,10 +123,19 @@ export function createShellTools(agentId: string) {
       // Working directory must stay inside the project (default: the team workspace)
       const team = config.agents[agentId]?.team;
       const defaultDir = team ? path.join('workspace', team) : 'workspace';
-      const workdir = path.resolve(ROOT_DIR, cwd ?? defaultDir);
-      const rel = path.relative(ROOT_DIR, workdir);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      const requestedWorkdir = path.resolve(ROOT_DIR, cwd ?? defaultDir);
+      const lexicalRel = path.relative(ROOT_DIR, requestedWorkdir);
+      if (lexicalRel.startsWith('..') || path.isAbsolute(lexicalRel)) {
         return { error: `Diretorio de trabalho fora do projeto: ${cwd}` };
+      }
+
+      const workdir = canonicalizePath(requestedWorkdir);
+      if (!workdir) {
+        return { error: `Nao foi possivel validar o diretorio de trabalho: ${cwd}` };
+      }
+      const rel = path.relative(PHYSICAL_ROOT_DIR, workdir);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { error: `Diretorio de trabalho aponta para fora do projeto: ${cwd}` };
       }
       if (!fs.existsSync(workdir)) {
         fs.mkdirSync(workdir, { recursive: true });

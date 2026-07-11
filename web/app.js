@@ -460,7 +460,7 @@ function pendingHtml(pending) {
     <div class="confirm-item" data-confirm-id="${esc(p.id)}">
       <code class="ds-code">${esc(p.command || p.message)}</code>
       <button class="ds-btn ds-btn--success ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="s">Permitir</button>
-      <button class="ds-btn ds-btn--outline ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="a">Sempre permitir</button>
+      ${p.allowAlways ? '<button class="ds-btn ds-btn--outline ds-btn--sm" data-confirm-id="' + esc(p.id) + '" data-confirm-answer="a">Sempre permitir</button>' : ''}
       <button class="ds-btn ds-btn--danger ds-btn--sm" data-confirm-id="${esc(p.id)}" data-confirm-answer="n">Negar</button>
     </div>
   `).join('');

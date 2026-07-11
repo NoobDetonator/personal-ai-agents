@@ -33,6 +33,7 @@ export interface AppConfig {
     allowedPaths: string[];
     blockedExtensions: string[];
     maxFileSizeKB: number;
+    confirmDestructive: boolean;
   };
   shell: {
     mode: 'confirm' | 'auto' | 'off';
@@ -100,9 +101,10 @@ export const DEFAULT_CONFIG: AppConfig = {
     },
   },
   fileOps: {
-    allowedPaths: ['./'],
+    allowedPaths: ['./workspace'],
     blockedExtensions: ['.exe', '.bat', '.cmd', '.ps1', '.sh', '.dll'],
     maxFileSizeKB: 512,
+    confirmDestructive: true,
   },
   shell: {
     mode: 'confirm',

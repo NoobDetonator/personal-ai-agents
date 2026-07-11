@@ -9,6 +9,7 @@ export interface PendingConfirmation {
   id: string;
   message: string;
   command?: string;
+  allowAlways: boolean;
   createdAt: number;
 }
 
@@ -53,8 +54,8 @@ function notifyChange(): void {
 }
 
 export function getPendingConfirmations(): PendingConfirmation[] {
-  return Array.from(pending.values()).map(({ id, message, command, createdAt }) => ({
-    id, message, command, createdAt,
+  return Array.from(pending.values()).map(({ id, message, command, allowAlways, createdAt }) => ({
+    id, message, command, allowAlways, createdAt,
   }));
 }
 
@@ -64,14 +65,14 @@ export function resolveConfirmation(id: string, answer: ConfirmAnswer): boolean 
   if (!item) return false;
   pending.delete(id);
   item.abortTerminalQuestion?.abort();
-  item.settle(answer);
+  item.settle(answer === 'always' && !item.allowAlways ? 'yes' : answer);
   notifyChange();
   return true;
 }
 
-function parseAnswer(raw: string): ConfirmAnswer {
+function parseAnswer(raw: string, allowAlways: boolean): ConfirmAnswer {
   const t = raw.trim().toLowerCase();
-  if (t === 'a' || t.startsWith('sempre')) return 'always';
+  if (allowAlways && (t === 'a' || t.startsWith('sempre'))) return 'always';
   if (t === 's' || t === 'y' || t.startsWith('sim') || t.startsWith('yes')) return 'yes';
   return 'no';
 }
@@ -85,7 +86,10 @@ export interface ConfirmResult {
  * Asks the user to approve an action. Answerable from the terminal (s/n/a)
  * or from any registered frontend (resolveConfirmation). First answer wins.
  */
-export async function askConfirmation(message: string, opts?: { command?: string }): Promise<ConfirmResult> {
+export async function askConfirmation(
+  message: string,
+  opts?: { command?: string; allowAlways?: boolean },
+): Promise<ConfirmResult> {
   const id = randomUUID().slice(0, 8);
 
   let settle!: (answer: ConfirmAnswer) => void;
@@ -95,6 +99,7 @@ export async function askConfirmation(message: string, opts?: { command?: string
     id,
     message,
     command: opts?.command,
+    allowAlways: opts?.allowAlways ?? true,
     createdAt: Date.now(),
     settle,
   };
@@ -106,14 +111,15 @@ export async function askConfirmation(message: string, opts?: { command?: string
   if (canUseTerminal) {
     const controller = new AbortController();
     item.abortTerminalQuestion = controller;
-    const query =
-      chalk.yellow(`\n  ${message}`) +
-      chalk.bold(' (s = sim / n = nao / a = sim e sempre permitir) ');
+    const choices = item.allowAlways
+      ? ' (s = sim / n = nao / a = sim e sempre permitir) '
+      : ' (s = sim / n = nao) ';
+    const query = chalk.yellow(`\n  ${message}`) + chalk.bold(choices);
     rl!.question(query, { signal: controller.signal }, raw => {
       // Ignore if someone else (web) already settled it
       if (pending.has(id)) {
         pending.delete(id);
-        item.settle(parseAnswer(raw));
+        item.settle(parseAnswer(raw, item.allowAlways));
         notifyChange();
       }
     });
