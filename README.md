@@ -32,10 +32,18 @@ Requisições com Host ou Origin externos são recusadas. A API também limita c
 ```bash
 npm run typecheck
 npm run build
+npm test
 node scripts/e2e-driver.mjs <passos.json>
 ```
 
-O repositório não expõe um script `test`; o driver E2E é executado com um arquivo de passos apropriado ao cenário.
+`npm test` roda a suíte de invariantes de segurança em `tests/` (validação de caminhos e symlinks nas operações de arquivo, bloqueio de SSRF na leitura web, allowlist do shell e carregamento confiável de configuração). A mesma suíte roda no CI (GitHub Actions, Linux e Windows) a cada push. O driver E2E é executado com um arquivo de passos apropriado ao cenário.
+
+## Segurança das ferramentas dos agentes
+
+- Operações de arquivo ficam restritas a `workspace/` por padrão (`fileOps.allowedPaths`); caminhos são resolvidos fisicamente, então symlinks/junctions não escapam das pastas permitidas. `config.json`, `.env*`, bancos `.db`, `.git/` e `node_modules/` nunca são acessíveis, e sobrescrever/deletar pede confirmação.
+- A leitura de páginas web recusa endereços privados/reservados (incluindo `localhost` e metadata de cloud), URLs com credenciais e revalida cada redirecionamento; respostas são limitadas a 1 MB.
+- A allowlist do shell não aceita comandos com encadeamento (`;`, `&`, `|`, `<`, `>`), substituição (`` ` ``, `$`) ou múltiplas linhas — esses sempre exigem confirmação.
+- `config.json` é validado ao carregar; um arquivo corrompido é preservado em backup datado (nunca sobrescrito silenciosamente) e a escrita é atômica.
 
 ## Estrutura
 

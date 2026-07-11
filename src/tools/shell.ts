@@ -11,11 +11,12 @@ import { askConfirmation } from '../chat/confirm.js';
 const ROOT_DIR = process.cwd();
 const PHYSICAL_ROOT_DIR = fs.realpathSync.native(ROOT_DIR);
 
-// Characters that allow chaining/redirecting — commands containing them never
-// bypass confirmation via the allowlist
-const CHAIN_CHARS = /[;&|<>`]/;
+// Characters that allow chaining/redirecting/substituting — commands containing
+// them never bypass confirmation via the allowlist. `$` covers $() substitution
+// (PowerShell e sh); newlines viram script multi-linha no powershell -Command.
+const CHAIN_CHARS = /[;&|<>`$\r\n]/;
 
-function isAllowlisted(command: string, allowlist: string[]): boolean {
+export function isAllowlisted(command: string, allowlist: string[]): boolean {
   const trimmed = command.trim();
   if (CHAIN_CHARS.test(trimmed)) return false;
   return allowlist.some(prefix => {
