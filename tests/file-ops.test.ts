@@ -8,21 +8,27 @@ import path from 'node:path';
 // entao o modulo e importado dinamicamente apos mudar para um diretorio
 // temporario. Cada arquivo de teste roda em processo proprio (node --test).
 let resolveAllowedPath: (p: string) => string | null;
+let resolveReadablePath: (p: string) => string | null;
 let root: string;
 let ws: string;
 let outside: string;
+let skillsDir: string;
 
 before(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'paa-fileops-'));
   process.chdir(root);
   ws = path.join(root, 'workspace');
   outside = path.join(root, 'outside');
+  skillsDir = path.join(root, 'skills');
   fs.mkdirSync(ws);
   fs.mkdirSync(outside);
+  fs.mkdirSync(path.join(skillsDir, 'demo'), { recursive: true });
   fs.writeFileSync(path.join(outside, 'secret.txt'), 'secret');
   fs.writeFileSync(path.join(ws, 'ok.txt'), 'ok');
   fs.writeFileSync(path.join(root, 'config.json'), '{}');
-  ({ resolveAllowedPath } = await import('../src/tools/file-ops.js'));
+  fs.writeFileSync(path.join(skillsDir, 'demo', 'SKILL.md'), '---\nname: demo\n---\ncorpo');
+  fs.writeFileSync(path.join(skillsDir, 'demo', 'perfil.md'), 'perfil auxiliar');
+  ({ resolveAllowedPath, resolveReadablePath } = await import('../src/tools/file-ops.js'));
 });
 
 test('permite arquivo dentro do workspace', () => {
@@ -60,6 +66,21 @@ test('nega extensoes bloqueadas e protegidas', () => {
 test('nega node_modules e .git mesmo dentro do workspace', () => {
   assert.equal(resolveAllowedPath(path.join(ws, 'node_modules', 'x.js')), null);
   assert.equal(resolveAllowedPath(path.join(ws, '.git', 'config')), null);
+});
+
+test('leitura pode acessar a pasta skills (perfis e arquivos auxiliares)', () => {
+  assert.ok(resolveReadablePath(path.join(skillsDir, 'demo', 'SKILL.md')));
+  assert.ok(resolveReadablePath(path.join(skillsDir, 'demo', 'perfil.md')));
+});
+
+test('escrita/delete NUNCA acessa a pasta skills', () => {
+  assert.equal(resolveAllowedPath(path.join(skillsDir, 'demo', 'SKILL.md')), null);
+  assert.equal(resolveAllowedPath(path.join(skillsDir, 'demo', 'perfil.md')), null);
+});
+
+test('leitura fora de workspace/skills continua negada', () => {
+  assert.equal(resolveReadablePath(path.join(outside, 'secret.txt')), null);
+  assert.equal(resolveReadablePath(path.join(root, 'config.json')), null);
 });
 
 test('nega escape por junction/symlink de diretorio', t => {

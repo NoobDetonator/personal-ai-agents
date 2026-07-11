@@ -3,6 +3,7 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getConfig, getConfigPath } from '../config/loader.js';
+import { getSkillsDir } from '../skills/loader.js';
 import { askConfirmation } from '../chat/confirm.js';
 
 // Extensions that are always blocked regardless of config (database files)
@@ -40,7 +41,7 @@ function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
-export function resolveAllowedPath(filePath: string): string | null {
+function resolveWithinRoots(filePath: string, extraRoots: string[]): string | null {
   const config = getConfig();
   const lexical = path.resolve(filePath);
 
@@ -68,7 +69,7 @@ export function resolveAllowedPath(filePath: string): string | null {
     if (PROTECTED_DIRS.some(dir => segments.includes(dir))) return null;
   }
 
-  const allowedRoots = [...config.fileOps.allowedPaths];
+  const allowedRoots = [...config.fileOps.allowedPaths, ...extraRoots];
   if (config.obsidian.vaultPath) allowedRoots.push(config.obsidian.vaultPath);
 
   const allowed = allowedRoots.some(root => {
@@ -76,6 +77,18 @@ export function resolveAllowedPath(filePath: string): string | null {
     return physicalRoot !== null && isInside(physicalRoot, physical);
   });
   return allowed ? physical : null;
+}
+
+export function resolveAllowedPath(filePath: string): string | null {
+  return resolveWithinRoots(filePath, []);
+}
+
+/**
+ * Reads may also access skills/ (skill bodies, profiles and auxiliary files
+ * referenced by useSkill); writes/deletes never do.
+ */
+export function resolveReadablePath(filePath: string): string | null {
+  return resolveWithinRoots(filePath, [getSkillsDir()]);
 }
 
 function checkFileSize(filePath: string): boolean {
@@ -106,7 +119,7 @@ export const readFileTool = tool({
     path: z.string().describe('Caminho do arquivo para ler'),
   }),
   execute: async ({ path: filePath }) => {
-    const resolved = resolveAllowedPath(filePath);
+    const resolved = resolveReadablePath(filePath);
     if (!resolved) {
       return { error: `Acesso negado ao caminho: ${filePath}` };
     }
@@ -237,7 +250,7 @@ export const listFilesTool = tool({
     path: z.string().describe('Caminho do diretorio').default('workspace'),
   }),
   execute: async ({ path: dirPath }) => {
-    const resolved = resolveAllowedPath(dirPath);
+    const resolved = resolveReadablePath(dirPath);
     if (!resolved) {
       return { error: `Acesso negado ao caminho: ${dirPath}` };
     }
