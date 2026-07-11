@@ -62,6 +62,7 @@ const nvidia = createOpenAI({
 import { getConfig } from '../config/loader.js';
 import { readSoul, readMemory, readDailyNote } from './personality.js';
 import { readUserProfile } from './user-profile.js';
+import { DATA_AUTHORITY_NOTE, fenceUntrustedData } from './prompt-data.js';
 import { listSkillMetas } from '../skills/loader.js';
 import { PROVIDER_ENV_KEYS } from '../config/models.js';
 import { addUsage } from './usage.js';
@@ -239,11 +240,19 @@ export class Agent {
       );
     }
 
+    // Fecha o trecho estavel com a nota de autoridade (constante, cacheavel)
+    parts.push(DATA_AUTHORITY_NOTE);
+
     // --- Bloco volatil (fica no final para preservar o prefixo de cache) ---
+    // Perfil, memoria e nota sao gravados por agentes/sessoes anteriores e
+    // podem carregar conteudo de origem externa: entram cercados como dados.
 
     const userProfile = readUserProfile();
     if (userProfile) {
-      parts.push('---\n# Perfil do Usuario (compartilhado entre todos os agentes)\n' + userProfile);
+      parts.push(
+        '---\n# Perfil do Usuario (compartilhado entre todos os agentes)\n' +
+        fenceUntrustedData('dados-perfil-usuario', userProfile)
+      );
     }
 
     let memory = readMemory(this.id);
@@ -254,12 +263,12 @@ export class Agent {
         memory = memory.slice(0, 2048) +
           '\n\n[...memoria truncada. Mova conteudo extenso para memorias profundas (saveDeepMemory) e mantenha aqui apenas o essencial.]';
       }
-      parts.push('---\n# Sua Memoria\n' + memory);
+      parts.push('---\n# Sua Memoria\n' + fenceUntrustedData('dados-memoria', memory));
     }
 
     const dailyNote = readDailyNote(this.id);
     if (dailyNote) {
-      parts.push('---\n# Sua Nota de Hoje\n' + dailyNote);
+      parts.push('---\n# Sua Nota de Hoje\n' + fenceUntrustedData('dados-nota-diaria', dailyNote));
     }
 
     return parts.join('\n\n');
