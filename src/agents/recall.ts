@@ -60,6 +60,7 @@ async function selectRelevant(userMessage: string, manifest: MemoryManifestEntry
       result.usage?.outputTokens ?? 0,
       result.usage?.inputTokenDetails?.cacheReadTokens ?? result.usage?.cachedInputTokens ?? 0,
       getConfig().ai.model,
+      { kind: 'recall' },
     );
 
     const match = result.text.match(/\[[\s\S]*?\]/);

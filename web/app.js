@@ -18,6 +18,14 @@ function fmtTokens(n) {
   return String(n ?? 0);
 }
 
+function fmtCost(n) {
+  return window.dsCharts ? dsCharts.fmtCost(n) : '$' + Number(n ?? 0).toFixed(4);
+}
+
+function fmtPct(fraction) {
+  return Math.round((fraction ?? 0) * 100) + '%';
+}
+
 /** Re-executa os renderizadores de icone apos qualquer innerHTML novo. */
 function refreshIcons() {
   if (window.lucide) lucide.createIcons();
@@ -214,43 +222,177 @@ async function refreshState() {
 
 // ---------- Visao geral ----------
 
+let overviewFilters = { range: '7d', team: '', agent: '' };
+try {
+  const saved = JSON.parse(localStorage.getItem('paa.overviewFilters') || '{}');
+  if (['24h', '7d', '30d'].includes(saved.range)) overviewFilters.range = saved.range;
+  if (typeof saved.team === 'string') overviewFilters.team = saved.team;
+  if (typeof saved.agent === 'string') overviewFilters.agent = saved.agent;
+} catch { /* usa padrao */ }
+
+function saveOverviewFilters() {
+  localStorage.setItem('paa.overviewFilters', JSON.stringify(overviewFilters));
+}
+
+const RANGE_LABEL = { '24h': 'últimas 24h', '7d': 'últimos 7 dias', '30d': 'últimos 30 dias' };
+
+/** Chip de tendência vs período anterior. mode 'pct' compara proporção; 'pp' diferença em pontos. */
+function trendChip(pair, { goodWhenUp = true, mode = 'pct' } = {}) {
+  const cur = pair?.current ?? 0;
+  const prev = pair?.previous ?? 0;
+  if (cur === 0 && prev === 0) {
+    return `<span class="ds-stat-card__trend ds-stat-card__trend--flat">&mdash;</span>`;
+  }
+  if (prev === 0) {
+    return `<span class="ds-stat-card__trend ds-stat-card__trend--flat">novo no período</span>`;
+  }
+  const diff = mode === 'pp' ? Math.round((cur - prev) * 100) : Math.round(((cur - prev) / prev) * 100);
+  if (diff === 0) {
+    return `<span class="ds-stat-card__trend ds-stat-card__trend--flat">estável vs anterior</span>`;
+  }
+  const arrow = diff > 0 ? '↑' : '↓';
+  const good = (diff > 0) === goodWhenUp;
+  const unit = mode === 'pp' ? 'pp' : '%';
+  return `<span class="ds-stat-card__trend ds-stat-card__trend--${good ? 'up' : 'down'}">${arrow} ${Math.abs(diff)}${unit} vs anterior</span>`;
+}
+
+function kpiCard(label, value, sub, trend) {
+  return `
+    <div class="ds-stat-card">
+      <span class="ds-stat-card__label">${label}</span>
+      <span class="ds-stat-card__value">${value}</span>
+      ${sub ? `<span class="ds-caption">${sub}</span>` : ''}
+      ${trend || ''}
+    </div>`;
+}
+
 async function renderOverview() {
   await refreshState();
 
-  const openTasks = (await api('/api/tasks')).filter(t => t.status === 'pending' || t.status === 'in_progress').length;
-  const su = state.sessionUsage || { inputTokens: 0, outputTokens: 0 };
+  // Filtro pode apontar para agente/equipe que ja nao existe
+  if (overviewFilters.agent && !state.agents.some(a => a.id === overviewFilters.agent)) overviewFilters.agent = '';
+  const teams = [...new Set(state.agents.map(a => a.team).filter(Boolean))].sort();
+  if (overviewFilters.team && !teams.includes(overviewFilters.team)) overviewFilters.team = '';
 
+  const qs = new URLSearchParams({ range: overviewFilters.range });
+  if (overviewFilters.team) qs.set('team', overviewFilters.team);
+  if (overviewFilters.agent) qs.set('agent', overviewFilters.agent);
+  const an = await api('/api/analytics?' + qs.toString());
+  const k = an.kpis;
+
+  // --- Barra de filtros ---
+  const agentOptions = state.agents.filter(a => !overviewFilters.team || a.team === overviewFilters.team);
+  const rangeBtn = (key) =>
+    `<button class="ov-seg__btn${overviewFilters.range === key ? ' is-active' : ''}" data-range="${key}">${RANGE_LABEL[key].replace('últimas ', '').replace('últimos ', '')}</button>`;
+  const filterBar = `
+    <div class="ov-filters">
+      <div class="ov-seg">${rangeBtn('24h')}${rangeBtn('7d')}${rangeBtn('30d')}</div>
+      <select class="ds-select ov-select" id="ov-team" title="Filtrar por equipe">
+        <option value="">Todas as equipes</option>
+        ${teams.map(t => `<option value="${esc(t)}"${overviewFilters.team === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+      </select>
+      <select class="ds-select ov-select" id="ov-agent" title="Filtrar por agente">
+        <option value="">Todos os agentes</option>
+        ${agentOptions.map(a => `<option value="${esc(a.id)}"${overviewFilters.agent === a.id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}
+      </select>
+    </div>`;
+
+  // --- KPIs com comparacao ---
+  const delegations = state.activeDelegations || [];
+  const successValue = (k.tasksDone.current + k.tasksFailed.current) > 0 ? fmtPct(k.successRate.current) : '—';
   const stats = `
-    <div class="ds-grid ds-grid-4 ds-stagger" style="margin-bottom:20px;">
-      <div class="ds-stat-card">
-        <span class="ds-stat-card__label">Agentes</span>
-        <span class="ds-stat-card__value">${state.agents.length}</span>
+    <div class="ds-grid ds-grid-3 ds-stagger ov-kpis">
+      ${kpiCard('Agentes ativos', k.activeAgents.current,
+        `de ${overviewFilters.agent ? 1 : agentOptions.length} ${overviewFilters.team || overviewFilters.agent ? 'no filtro' : 'cadastrados'}`,
+        trendChip(k.activeAgents))}
+      ${kpiCard('Tarefas em execução', k.tasksInProgress,
+        `${k.tasksPending} pendentes · ${delegations.length} delegações ativas`, '')}
+      ${kpiCard('Taxa de sucesso', successValue,
+        `${k.tasksDone.current} concluídas · ${k.tasksFailed.current} falhas`, trendChip(k.successRate, { mode: 'pp' }))}
+      ${kpiCard('Tokens', fmtTokens(k.tokens.current),
+        `${fmtTokens(k.inputTokens)}↓ entrada · ${fmtTokens(k.outputTokens)}↑ saída`, trendChip(k.tokens, { goodWhenUp: false }))}
+      ${kpiCard('Custo', (k.cost.known ? '' : '≥ ') + fmtCost(k.cost.current),
+        k.avgCallMs != null ? `média ${(k.avgCallMs / 1000).toFixed(1)}s por chamada` : 'sem chamadas registradas',
+        trendChip(k.cost, { goodWhenUp: false }))}
+      ${kpiCard('Cache aproveitado', fmtPct(k.cacheRate.current),
+        'do input reutilizado', trendChip(k.cacheRate, { mode: 'pp' }))}
+    </div>`;
+
+  // --- Graficos ---
+  const ts = an.taskStatus || {};
+  const donutItems = [
+    { label: 'Concluídas', value: ts.done || 0, color: 'var(--ds-feedback-success)' },
+    { label: 'Em execução', value: ts.in_progress || 0, color: 'var(--ds-feedback-warning)' },
+    { label: 'Pendentes', value: ts.pending || 0, color: 'var(--ds-feedback-info)' },
+    { label: 'Falharam', value: ts.failed || 0, color: 'var(--ds-feedback-danger)' },
+    { label: 'Canceladas', value: ts.cancelled || 0, color: 'var(--ds-text-disabled)' },
+  ];
+  const seriesLegend = `
+    <div class="chart-legend chart-legend--row">
+      <div class="chart-legend__item"><span class="chart-legend__dot" style="background:var(--ds-action-primary);"></span>entrada</div>
+      <div class="chart-legend__item"><span class="chart-legend__dot" style="background:var(--ds-feedback-violet);"></span>saída</div>
+      <div class="chart-legend__item"><span class="chart-legend__dot chart-legend__dot--dash" style="background:var(--ds-feedback-warning);"></span>custo</div>
+    </div>`;
+  const chartsRow = `
+    <div class="ov-charts">
+      <div class="ds-card">
+        <div class="ds-card__header">
+          <h3 class="ds-card__title">Tokens e custo · ${RANGE_LABEL[overviewFilters.range]}</h3>
+          ${seriesLegend}
+        </div>
+        <div class="chart-surface">${dsCharts.timeSeries(an.series)}</div>
       </div>
-      <div class="ds-stat-card">
-        <span class="ds-stat-card__label">Tarefas abertas</span>
-        <span class="ds-stat-card__value">${openTasks}</span>
-      </div>
-      <div class="ds-stat-card">
-        <span class="ds-stat-card__label">Tokens hoje</span>
-        <span class="ds-stat-card__value">${fmtTokens(state.tokensToday.input + state.tokensToday.output)}</span>
-      </div>
-      <div class="ds-stat-card">
-        <span class="ds-stat-card__label">Custo sessão</span>
-        <span class="ds-stat-card__value">${state.sessionUsage?.costUsd != null ? '$' + state.sessionUsage.costUsd.toFixed(3) : '—'}</span>
+      <div class="ds-card">
+        <div class="ds-card__header"><h3 class="ds-card__title">Status das tarefas</h3></div>
+        <div class="chart-surface chart-surface--center">${dsCharts.donut(donutItems, { centerLabel: 'tarefas', ariaLabel: 'Status das tarefas' })}</div>
       </div>
     </div>`;
 
+  // --- Carga por agente ---
+  const maxLoad = Math.max(...(an.agentLoad || []).map(a => a.inputTokens + a.outputTokens), 1);
+  const loadRows = (an.agentLoad || []).map(a => {
+    const total = a.inputTokens + a.outputTokens;
+    const taskChips = [
+      a.tasksActive ? `<span class="ds-badge ds-badge--warning">${a.tasksActive} ativa${a.tasksActive > 1 ? 's' : ''}</span>` : '',
+      a.tasksDone ? `<span class="ds-badge ds-badge--success">${a.tasksDone} ok</span>` : '',
+      a.tasksFailed ? `<span class="ds-badge ds-badge--danger">${a.tasksFailed} falha${a.tasksFailed > 1 ? 's' : ''}</span>` : '',
+    ].join('');
+    return `
+      <div class="load-row" role="link" tabindex="0" data-agent-id="${esc(a.agentId)}">
+        <span class="load-row__name"><b>${esc(a.name)}</b>${a.team ? ` <span class="ds-caption">${esc(a.team)}</span>` : ''}</span>
+        <div class="load-row__bar" title="${fmtTokens(a.inputTokens)}↓ entrada · ${fmtTokens(a.outputTokens)}↑ saída">
+          <span style="width:${((a.inputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-action-primary);"></span>
+          <span style="width:${((a.outputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-feedback-violet);"></span>
+        </div>
+        <span class="ds-caption load-row__meta">${fmtTokens(total)} tokens · ${a.messages} msgs</span>
+        <span class="load-row__tasks">${taskChips}</span>
+      </div>`;
+  }).join('');
+  const loadCard = `
+    <div class="ds-card" style="margin-bottom:16px;">
+      <div class="ds-card__header"><h3 class="ds-card__title">Carga por agente · ${RANGE_LABEL[overviewFilters.range]}</h3></div>
+      ${loadRows || `<div class="ds-empty-state" style="padding:20px;"><p class="ds-body-sm ds-text-muted">Nenhuma atividade de agentes no período.</p></div>`}
+    </div>`;
+
+  // --- Hierarquia com estado ao vivo ---
+  const busy = new Map();
+  for (const d of delegations) {
+    busy.set(d.to, 'executando');
+    if (!busy.has(d.from)) busy.set(d.from, 'delegou');
+  }
   const byParent = {};
   for (const a of state.agents) {
     const p = a.parent ?? '__root__';
     (byParent[p] = byParent[p] || []).push(a);
   }
-
   const roots = state.agents.filter(a => !a.parent);
   const lines = [];
   const walk = (agent, depth) => {
     const indent = depth === 0 ? '' : '<span class="tree-indent">' + '│&nbsp;&nbsp;'.repeat(depth - 1) + '├─&nbsp;</span>';
+    const activity = busy.get(agent.id);
     const badges = [
+      activity === 'executando' ? `<span class="ds-badge ds-badge--warning ds-anim-thinking">⚙ executando</span>` : '',
+      activity === 'delegou' ? `<span class="ds-badge ds-badge--info">↳ delegou</span>` : '',
       roleBadge(agent.role),
       agent.team ? `<span class="ds-badge ds-badge--success">${esc(agent.team)}</span>` : '',
       agent.temporary ? `<span class="ds-badge ds-badge--warning">temp</span>` : '',
@@ -267,12 +409,12 @@ async function renderOverview() {
   };
   for (const r of roots) walk(r, 0);
 
-  const teams = {};
+  const teamGroups = {};
   for (const a of state.agents) {
-    if (a.team) (teams[a.team] = teams[a.team] || []).push(a.name);
+    if (a.team) (teamGroups[a.team] = teamGroups[a.team] || []).push(a.name);
   }
-  const teamHtml = Object.keys(teams).length
-    ? Object.entries(teams).map(([t, members]) => `
+  const teamHtml = Object.keys(teamGroups).length
+    ? Object.entries(teamGroups).map(([t, members]) => `
         <div class="team-row">
           <i data-lucide="folder-kanban" class="ds-icon ds-icon--sm ds-text-muted"></i>
           <b>${esc(t)}</b>
@@ -283,9 +425,17 @@ async function renderOverview() {
          <p class="ds-body-sm ds-text-muted">Nenhuma equipe ainda — peça para a Aria criar uma.</p>
        </div>`;
 
+  // Preserva o feed ao re-renderizar (eventos SSE chegam entre renders)
+  const prevFeed = $('#overview-feed')?.innerHTML || '';
+
   $('#view-overview').innerHTML = `
-    <h2 class="ds-heading-2xl" style="margin-bottom:16px;">Visão geral</h2>
+    <div class="ov-header">
+      <h2 class="ds-heading-2xl">Visão geral</h2>
+      ${filterBar}
+    </div>
     ${stats}
+    ${chartsRow}
+    ${loadCard}
     <div class="ds-card" style="margin-bottom:16px;">
       <div class="ds-card__header"><h3 class="ds-card__title">Hierarquia dos agentes</h3></div>
       <div class="tree">${lines.join('')}</div>
@@ -299,7 +449,37 @@ async function renderOverview() {
       <div id="overview-feed" class="live-feed" style="max-height:320px;overflow-y:auto;"></div>
     </div>
   `;
+  $('#overview-feed').innerHTML = prevFeed;
+
+  document.querySelectorAll('.ov-seg__btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overviewFilters.range = btn.dataset.range;
+      saveOverviewFilters();
+      renderOverview();
+    });
+  });
+  $('#ov-team').onchange = e => {
+    overviewFilters.team = e.target.value;
+    overviewFilters.agent = '';
+    saveOverviewFilters();
+    renderOverview();
+  };
+  $('#ov-agent').onchange = e => {
+    overviewFilters.agent = e.target.value;
+    saveOverviewFilters();
+    renderOverview();
+  };
   refreshIcons();
+}
+
+// Re-renderiza a visao geral (com debounce) quando algo operacional muda
+let overviewRefreshTimer = null;
+function scheduleOverviewRefresh() {
+  if ($('#view-overview').classList.contains('hidden')) return;
+  clearTimeout(overviewRefreshTimer);
+  overviewRefreshTimer = setTimeout(() => {
+    if (!$('#view-overview').classList.contains('hidden')) renderOverview();
+  }, 600);
 }
 
 // ---------- Agentes ----------
@@ -683,6 +863,7 @@ function handleEvent(evt) {
       break;
     case 'board_changed':
       if (!$('#view-board').classList.contains('hidden')) renderBoard();
+      scheduleOverviewRefresh();
       break;
     case 'conversation_changed': {
       const m = location.hash.match(/^#\/agent\/(.+)$/);
@@ -695,34 +876,25 @@ function handleEvent(evt) {
 }
 
 // --- Delegacoes ao vivo (com botao de cancelar) ---
-
-const delegationBubbles = new Map(); // delegation id -> [elements]
+// Bolhas sao rastreadas por data-deleg-id (nao por referencia de elemento):
+// sobrevivem ao re-render da visao geral, que restaura o feed via innerHTML.
 
 function handleDelegationEvent(p) {
   if (p.status === 'start') {
-    const els = [];
     for (const feed of feedTargets()) {
       const div = document.createElement('div');
       div.className = 'bubble bubble-system ds-anim-enter-slide-up';
-      div.innerHTML = `<i data-lucide="corner-down-right" class="ds-icon ds-icon--xs"></i> <b>${esc(p.agentName || p.to)}</b> trabalhando... <span class="deleg-status ds-caption"></span> <button class="ds-btn ds-btn--danger ds-btn--sm deleg-cancel">Cancelar</button>`;
-      div.querySelector('.deleg-cancel').onclick = async () => {
-        await api('/api/delegations/cancel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: p.id }),
-        });
-      };
+      div.dataset.delegId = p.id;
+      div.innerHTML = `<i data-lucide="corner-down-right" class="ds-icon ds-icon--xs"></i> <b>${esc(p.agentName || p.to)}</b> trabalhando... <span class="deleg-status ds-caption"></span> <button class="ds-btn ds-btn--danger ds-btn--sm deleg-cancel" data-deleg-cancel="${esc(p.id)}">Cancelar</button>`;
       feed.appendChild(div);
       feed.scrollTop = feed.scrollHeight;
-      els.push(div);
     }
-    delegationBubbles.set(p.id, els);
     refreshIcons();
+    scheduleOverviewRefresh();
     return;
   }
 
-  const els = delegationBubbles.get(p.id) || [];
-  for (const div of els) {
+  document.querySelectorAll(`.bubble[data-deleg-id="${CSS.escape(p.id)}"]`).forEach(div => {
     const status = div.querySelector('.deleg-status');
     if (p.status === 'progress' && status) {
       status.textContent = '⚙ ' + p.toolName;
@@ -731,11 +903,20 @@ function handleDelegationEvent(p) {
       if (status) status.textContent = icon;
       div.querySelector('.deleg-cancel')?.remove();
     }
-  }
-  if (p.status !== 'progress') {
-    delegationBubbles.delete(p.id);
-  }
+  });
+  if (p.status !== 'progress') scheduleOverviewRefresh();
 }
+
+document.addEventListener('click', event => {
+  const button = closestFromEvent(event, '[data-deleg-cancel]');
+  if (!button) return;
+  button.disabled = true;
+  void api('/api/delegations/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: button.dataset.delegCancel }),
+  });
+});
 
 function connectSse() {
   const es = new EventSource('/api/events');

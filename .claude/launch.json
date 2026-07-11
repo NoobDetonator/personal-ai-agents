@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3131
+    },
+    {
+      "name": "dashboard-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "scripts/dev-dashboard-preview.ts"],
+      "port": 3199
     }
   ]
 }

@@ -2,7 +2,11 @@
  * Contador de uso da sessao atual (desde o boot). Alimentado por
  * Agent.chat/chatStream — cobre chat, grupos, delegacoes, cron e heartbeat.
  * O custo e acumulado por chamada com o preco do modelo usado nela.
+ * Cada chamada tambem vira uma linha em usage_events (historico para analytics).
  */
+
+import { randomUUID } from 'node:crypto';
+import { getDb } from '../db/connection.js';
 
 // Precos por 1M de tokens (USD), da doc oficial de cada provedor.
 // Modelos fora da tabela: custo nao estimado (mostra so tokens).
@@ -27,18 +31,52 @@ let cachedInputTokens = 0;
 let costUsd = 0;
 let costKnown = true; // false se alguma chamada usou modelo sem preco na tabela
 
-export function addUsage(input: number, output: number, cached: number, modelId: string): void {
+/** Custo (USD) de uma chamada; null quando o modelo nao tem preco tabelado. */
+export function computeCallCost(input: number, output: number, cached: number, modelId: string): number | null {
+  const price = PRICING[modelId];
+  if (!price) return null;
+  const miss = Math.max(0, input - cached);
+  return (miss * price.inMiss + cached * price.inHit + output * price.out) / 1_000_000;
+}
+
+export interface UsageMeta {
+  agentId?: string;
+  kind?: 'chat' | 'recall' | 'summary';
+  durationMs?: number;
+}
+
+export function addUsage(input: number, output: number, cached: number, modelId: string, meta?: UsageMeta): void {
   calls++;
   inputTokens += input;
   outputTokens += output;
   cachedInputTokens += cached;
 
-  const price = PRICING[modelId];
-  if (price) {
-    const miss = Math.max(0, input - cached);
-    costUsd += (miss * price.inMiss + cached * price.inHit + output * price.out) / 1_000_000;
+  const callCost = computeCallCost(input, output, cached, modelId);
+  if (callCost != null) {
+    costUsd += callCost;
   } else {
     costKnown = false;
+  }
+
+  // Historico persistente (fail-open: metricas nunca quebram uma chamada,
+  // ex.: testes que usam addUsage sem banco inicializado).
+  try {
+    getDb().prepare(
+      `INSERT INTO usage_events (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, cost_usd, duration_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      randomUUID(),
+      meta?.agentId ?? null,
+      modelId,
+      meta?.kind ?? 'chat',
+      input,
+      output,
+      cached,
+      callCost,
+      meta?.durationMs ?? null,
+    );
+  } catch {
+    // sem banco: mantem apenas os contadores de sessao
   }
 }
 

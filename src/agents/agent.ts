@@ -381,6 +381,7 @@ export class Agent {
     const config = getConfig();
     const provider = this.getProvider();
     const temperature = provider === 'nvidia' ? 0.2 : config.ai.temperature;
+    const startedAt = Date.now();
 
     const result = await generateText({
       model: this.getModel(),
@@ -398,7 +399,10 @@ export class Agent {
     const outputTokens = result.usage?.outputTokens ?? 0;
     const cachedInputTokens =
       result.usage?.inputTokenDetails?.cacheReadTokens ?? result.usage?.cachedInputTokens ?? 0;
-    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model);
+    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model, {
+      agentId: this.id,
+      durationMs: Date.now() - startedAt,
+    });
 
     return {
       text: result.text,
@@ -436,6 +440,7 @@ export class Agent {
     }
 
     const temperature = config.ai.temperature;
+    const startedAt = Date.now();
 
     const result = streamText({
       model: this.getModel(),
@@ -481,7 +486,10 @@ export class Agent {
       }
     }
 
-    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model);
+    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model, {
+      agentId: this.id,
+      durationMs: Date.now() - startedAt,
+    });
     return { text, inputTokens, outputTokens, cachedInputTokens, toolCallCount, finishReason };
   }
 

@@ -76,6 +76,22 @@ export function runMigrations(db: Database.Database): void {
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id            TEXT PRIMARY KEY,
+      agent_id      TEXT,
+      model         TEXT NOT NULL,
+      kind          TEXT NOT NULL DEFAULT 'chat',
+      input_tokens  INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cached_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd      REAL,
+      duration_ms   INTEGER,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_events_created ON usage_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_agent ON usage_events(agent_id, created_at);
+
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);

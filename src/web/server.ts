@@ -21,6 +21,7 @@ import { getSessionUsage } from '../agents/usage.js';
 import { listProfiles } from '../agents/prompt-composer.js';
 import { resolveAgentProfileProvenance } from '../agents/profile-provenance.js';
 import { getMcpStatus } from '../mcp/manager.js';
+import { getAnalytics, ANALYTICS_RANGES, type AnalyticsRange } from './analytics.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
@@ -246,6 +247,30 @@ function apiAgent(id: string): unknown | null {
   };
 }
 
+function apiAnalytics(params: URLSearchParams): unknown {
+  const config = getConfig();
+  const rawRange = params.get('range') ?? '7d';
+  const range: AnalyticsRange = (ANALYTICS_RANGES as string[]).includes(rawRange)
+    ? rawRange as AnalyticsRange
+    : '7d';
+
+  const idPattern = /^[a-z0-9_-]+$/i;
+  const agent = params.get('agent') ?? undefined;
+  const team = params.get('team') ?? undefined;
+
+  const agents = Object.entries(config.agents).map(([id, cfg]) => ({
+    id,
+    name: cfg.name,
+    team: cfg.team ?? null,
+  }));
+
+  return getAnalytics(getDb(), agents, {
+    range,
+    agent: agent && idPattern.test(agent) ? agent : undefined,
+    team: team && idPattern.test(team) ? team : undefined,
+  });
+}
+
 function apiConversation(id: string): unknown {
   const db = getDb();
   const messages = db.prepare(
@@ -420,6 +445,7 @@ export function startWebServer(): void {
 
       if (method === 'GET' && p === '/api/events') return handleSse(res);
       if (method === 'GET' && p === '/api/state') return json(res, 200, apiState());
+      if (method === 'GET' && p === '/api/analytics') return json(res, 200, apiAnalytics(url.searchParams));
       if (method === 'GET' && p === '/api/tasks') return json(res, 200, listTaskRows());
       if (method === 'GET' && p === '/api/skills') return json(res, 200, listSkillMetas().map(s => ({ id: s.id, name: s.name, description: s.description })));
       if (method === 'GET' && p === '/api/schedules') return json(res, 200, apiSchedules());
