@@ -161,15 +161,20 @@ export const writeFileTool = tool({
     if (!checkContentSize(content)) {
       return { error: `Conteudo excede o limite de tamanho configurado` };
     }
-    if (fs.existsSync(resolved) && !await confirmDestructive('Sobrescrever arquivo', resolved)) {
-      return { error: 'Sobrescrita negada pelo usuario.' };
+    const overwriting = fs.existsSync(resolved);
+    if (overwriting && !await confirmDestructive('Sobrescrever arquivo', resolved)) {
+      return { error: 'Sobrescrita negada pelo usuario.', confirmation: 'denied' };
     }
     const dir = path.dirname(resolved);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(resolved, content, 'utf-8');
-    return { success: true, path: resolved };
+    return {
+      success: true,
+      path: resolved,
+      ...(overwriting ? { confirmation: 'approved_by_user' } : {}),
+    };
   },
 });
 
@@ -247,10 +252,14 @@ export const deleteFileTool = tool({
       return { error: `O caminho nao e um arquivo: ${filePath}` };
     }
     if (!await confirmDestructive('Deletar arquivo', resolved)) {
-      return { error: 'Exclusao negada pelo usuario.' };
+      return { error: 'Exclusao negada pelo usuario.', confirmation: 'denied' };
     }
     fs.unlinkSync(resolved);
-    return { success: true, path: resolved };
+    return {
+      success: true,
+      path: resolved,
+      confirmation: getConfig().fileOps.confirmDestructive ? 'approved_by_user' : 'not_required',
+    };
   },
 });
 

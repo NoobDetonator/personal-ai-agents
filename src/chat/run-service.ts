@@ -17,6 +17,7 @@ import {
 import { buildProjectContext } from '../projects/service.js';
 import { runWithProjectContext } from '../projects/context.js';
 import { emitBus } from '../web/bus.js';
+import { rejectConfirmationsForRun } from './confirm.js';
 import { recallRelevantMemories } from '../agents/recall.js';
 
 // ChatRunService: orquestra um turno de chat como um Run, independente da CLI
@@ -217,6 +218,19 @@ async function executeRun(
     const aborted = controller.signal.aborted;
     const status: RunStatus = aborted ? (timedOut ? 'timed_out' : 'cancelled') : 'failed';
     const message = error instanceof Error ? error.message : String(error);
+    const terminalText = status === 'cancelled'
+      ? '[Execucao cancelada pelo usuario. Nao continue esta tarefa em turnos futuros, salvo novo pedido explicito.]'
+      : status === 'timed_out'
+        ? '[Execucao encerrada por timeout. Nao considere a tarefa concluida nem a continue automaticamente.]'
+        : `[Execucao falhou: ${message}. Nao considere a tarefa concluida.]`;
+    saveRunMessage({
+      conversationId,
+      role: 'assistant',
+      content: terminalText,
+      agentId,
+      runId,
+      status,
+    });
     appendRunEvent(runId, 'error', { message, status });
     const final = finishRun(runId, {
       status,
@@ -240,6 +254,7 @@ export function cancelRun(runId: string): boolean {
   const controller = activeRuns.get(runId);
   if (!controller) return false;
   controller.abort();
+  rejectConfirmationsForRun(runId);
   return true;
 }
 

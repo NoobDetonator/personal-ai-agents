@@ -727,8 +727,19 @@ async function renderChat(convId) {
   const tab = chatTabs.find(t => t.id === convId);
   if (tab && meta.title) { tab.title = meta.title; saveChatTabs(); }
 
+  const eventsByRun = new Map();
+  for (const event of data.runEvents || []) {
+    const list = eventsByRun.get(event.run_id) || [];
+    list.push(event);
+    eventsByRun.set(event.run_id, list);
+  }
   const messagesHtml = (data.messages || []).map(m =>
-    chatMsgHtml(m.role, m.role === 'user' ? 'Você' : (m.agent_id || 'Aria'), m.content)
+    chatMsgHtml(
+      m.role,
+      m.role === 'user' ? 'Você' : (m.agent_id || 'Aria'),
+      m.content,
+      m.role === 'assistant' && m.run_id ? eventsByRun.get(m.run_id) : null,
+    )
   ).join('') || `<div class="chat-empty ds-text-muted ds-body-sm">Envie a primeira mensagem para começar.</div>`;
 
   view.innerHTML = `
@@ -839,7 +850,10 @@ function setChatComposerState(streaming) {
   const cancel = $('#chat-cancel');
   const input = $('#chat-input');
   if (send) send.disabled = streaming;
-  if (cancel) cancel.classList.toggle('hidden', !streaming);
+  if (cancel) {
+    cancel.classList.toggle('hidden', !streaming);
+    cancel.disabled = false;
+  }
   if (input) input.disabled = streaming;
 }
 

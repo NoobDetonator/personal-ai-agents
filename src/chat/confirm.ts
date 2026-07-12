@@ -80,6 +80,14 @@ export function resolveConfirmation(id: string, answer: ConfirmAnswer): boolean 
   return true;
 }
 
+export function rejectConfirmationsForRun(runId: string): number {
+  const ids = Array.from(pending.values())
+    .filter(item => item.runId === runId)
+    .map(item => item.id);
+  for (const id of ids) resolveConfirmation(id, 'no');
+  return ids.length;
+}
+
 function parseAnswer(raw: string, allowAlways: boolean): ConfirmAnswer {
   const t = raw.trim().toLowerCase();
   if (allowAlways && (t === 'a' || t.startsWith('sempre'))) return 'always';

@@ -100,7 +100,7 @@ test('retomada: listRunEvents(after) devolve só a cauda após um sequence', asy
   assert.equal(tail.length, all.length - all.filter(e => e.sequence <= mid).length);
 });
 
-test('cancelamento aborta o turno e marca cancelled (sem mensagem do assistente)', async () => {
+test('cancelamento persiste marcador terminal para nao retomar a tarefa depois', async () => {
   const conversationId = newConversation();
   const { runId, done } = runService.startChatRun({
     conversationId,
@@ -116,10 +116,11 @@ test('cancelamento aborta o turno e marca cancelled (sem mensagem do assistente)
   assert.equal(status, 'cancelled');
   assert.equal(runHelpers.getRun(runId)!.status, 'cancelled');
 
-  const assistantMsgs = connection.getDb().prepare(
-    "SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ? AND role = 'assistant'",
-  ).get(conversationId) as { c: number };
-  assert.equal(assistantMsgs.c, 0);
+  const assistantMsg = connection.getDb().prepare(
+    "SELECT content, status FROM messages WHERE conversation_id = ? AND role = 'assistant'",
+  ).get(conversationId) as { content: string; status: string };
+  assert.equal(assistantMsg.status, 'cancelled');
+  assert.match(assistantMsg.content, /Nao continue esta tarefa/);
 });
 
 test('timeout vira status timed_out visível', async () => {
@@ -222,4 +223,31 @@ test('confirmacao fica vinculada ao projeto, conversa e run', async () => {
   assert.equal(await started.done, 'done');
   assert.equal(observedStatus, 'waiting_confirmation');
   assert.ok(runHelpers.listRunEvents(started.runId).some(event => event.type === 'confirmation'));
+});
+
+
+test('cancelamento rejeita confirmacoes pendentes do mesmo run', async () => {
+  const conversationId = newConversation();
+  const started = runService.startChatRun({
+    conversationId,
+    text: 'acao destrutiva',
+    executor: async ({ abortSignal }) => {
+      const decision = await confirm.askConfirmation('confirmacao do run cancelado', { allowAlways: false });
+      if (abortSignal.aborted) throw new Error('abortado');
+      return {
+        text: decision.answer,
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        toolCallCount: 1,
+        finishReason: 'stop',
+      };
+    },
+  });
+
+  const pending = confirm.getPendingConfirmations().filter(item => item.runId === started.runId);
+  assert.equal(pending.length, 1);
+  assert.equal(runService.cancelRun(started.runId), true);
+  assert.equal(await started.done, 'cancelled');
+  assert.equal(confirm.getPendingConfirmations().some(item => item.runId === started.runId), false);
 });
