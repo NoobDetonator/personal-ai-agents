@@ -22,6 +22,22 @@ import { listProfiles } from '../agents/prompt-composer.js';
 import { resolveAgentProfileProvenance } from '../agents/profile-provenance.js';
 import { getMcpStatus } from '../mcp/manager.js';
 import { getAnalytics, ANALYTICS_RANGES, type AnalyticsRange } from './analytics.js';
+import {
+  listProjects,
+  getProject,
+  getProjectSettings,
+  createProject,
+  updateProject,
+  archiveProject,
+  deleteProject,
+} from '../projects/service.js';
+import {
+  listProjectConversations,
+  createProjectConversation,
+  patchConversation,
+} from '../projects/conversation-service.js';
+import { startChatRun, cancelRun } from '../chat/run-service.js';
+import { getRun, listRunEvents } from '../db/run-helpers.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
@@ -333,6 +349,104 @@ async function handleSettings(req: http.IncomingMessage, res: http.ServerRespons
   json(res, 200, { success: true, config: (apiState() as { config: unknown }).config });
 }
 
+// --- Projects ---
+
+function apiProjects(params: URLSearchParams): unknown {
+  const status = params.get('status');
+  return listProjects(status === 'archived' || status === 'active' ? status : undefined);
+}
+
+function apiProjectDetail(id: string): unknown | null {
+  const project = getProject(id);
+  if (!project) return null;
+  return {
+    project,
+    settings: getProjectSettings(id),
+    conversations: listProjectConversations(id, { includeArchived: true }),
+  };
+}
+
+async function handleCreateProject(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await readBody(req);
+  const name = String(body.name ?? '').trim();
+  if (!name) throw new HttpError(400, 'Nome do projeto e obrigatorio');
+  if (name.length > 120) throw new HttpError(400, 'Nome muito longo');
+
+  const project = createProject({
+    name,
+    description: body.description != null ? String(body.description) : null,
+    defaultModel: body.defaultModel != null ? String(body.defaultModel) : null,
+    defaultProvider: body.defaultProvider != null ? String(body.defaultProvider) : null,
+  });
+
+  let conversationId: string | null = null;
+  if (body.createInitialConversation) {
+    conversationId = createProjectConversation(project.id, getConfig().defaultAgent, {
+      title: 'Conversa inicial',
+      createdBy: 'web',
+    });
+  }
+  json(res, 201, { project, conversationId });
+}
+
+async function handlePatchProject(req: http.IncomingMessage, res: http.ServerResponse, id: string): Promise<void> {
+  const body = await readBody(req);
+  const updated = updateProject(id, {
+    name: body.name != null ? String(body.name) : undefined,
+    description: body.description !== undefined ? (body.description === null ? null : String(body.description)) : undefined,
+  });
+  return updated ? json(res, 200, { project: updated }) : json(res, 404, { error: 'projeto nao encontrado' });
+}
+
+async function handleDeleteProject(req: http.IncomingMessage, res: http.ServerResponse, id: string): Promise<void> {
+  const body = await readBody(req);
+  const result = deleteProject(id, String(body.confirmName ?? ''));
+  return json(res, result.ok ? 200 : 400, result.ok ? { success: true } : { error: result.error });
+}
+
+// --- Conversations & runs ---
+
+async function handleCreateConversation(req: http.IncomingMessage, res: http.ServerResponse, projectId: string): Promise<void> {
+  if (!getProject(projectId)) return json(res, 404, { error: 'projeto nao encontrado' });
+  const body = await readBody(req);
+  const agentId = body.agentId != null ? String(body.agentId) : getConfig().defaultAgent;
+  if (!/^[a-z0-9_-]+$/i.test(agentId)) throw new HttpError(400, 'agentId invalido');
+  const conversationId = createProjectConversation(projectId, agentId, {
+    title: body.title != null ? String(body.title) : undefined,
+    createdBy: 'web',
+  });
+  json(res, 201, { conversationId });
+}
+
+async function handlePatchConversation(req: http.IncomingMessage, res: http.ServerResponse, id: string): Promise<void> {
+  const body = await readBody(req);
+  const ok = patchConversation(id, {
+    title: body.title != null ? String(body.title) : undefined,
+    pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+    archived: typeof body.archived === 'boolean' ? body.archived : undefined,
+  });
+  json(res, ok ? 200 : 404, { success: ok });
+}
+
+async function handlePostMessage(req: http.IncomingMessage, res: http.ServerResponse, conversationId: string): Promise<void> {
+  const body = await readBody(req);
+  const text = String(body.text ?? '').trim();
+  if (!text) throw new HttpError(400, 'Texto da mensagem e obrigatorio');
+  try {
+    const { runId } = startChatRun({ conversationId, text });
+    json(res, 202, { runId });
+  } catch (error) {
+    json(res, 404, { error: error instanceof Error ? error.message : 'conversa nao encontrada' });
+  }
+}
+
+function apiRunEvents(runId: string, params: URLSearchParams): unknown | null {
+  const run = getRun(runId);
+  if (!run) return null;
+  const after = Math.max(0, Number(params.get('after') ?? '0') || 0);
+  return { run, events: listRunEvents(runId, after) };
+}
+
 async function handleConfirm(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const body = await readBody(req);
   const id = String(body.id ?? '');
@@ -414,11 +528,11 @@ export function startWebServer(): void {
       }
 
       const method = req.method ?? 'GET';
-      if (!['GET', 'POST'].includes(method)) {
-        res.setHeader('Allow', 'GET, POST');
+      if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
+        res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
         return json(res, 405, { error: 'metodo nao permitido' });
       }
-      if (method === 'POST' && !isTrustedMutationRequest(req, config.web.port)) {
+      if (method !== 'GET' && !isTrustedMutationRequest(req, config.web.port)) {
         return json(res, 403, { error: 'origem nao permitida' });
       }
 
@@ -461,6 +575,56 @@ export function startWebServer(): void {
 
       const convMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
       if (method === 'GET' && convMatch) return json(res, 200, apiConversation(convMatch[1]));
+
+      // --- Projects ---
+      if (method === 'GET' && p === '/api/projects') return json(res, 200, apiProjects(url.searchParams));
+      if (method === 'POST' && p === '/api/projects') return await handleCreateProject(req, res);
+
+      const projMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})$/i);
+      if (projMatch) {
+        const pid = projMatch[1];
+        if (method === 'GET') {
+          const data = apiProjectDetail(pid);
+          return data ? json(res, 200, data) : json(res, 404, { error: 'projeto nao encontrado' });
+        }
+        if (method === 'PATCH') return await handlePatchProject(req, res, pid);
+        if (method === 'DELETE') return await handleDeleteProject(req, res, pid);
+      }
+
+      const projArchiveMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/archive$/i);
+      if (method === 'POST' && projArchiveMatch) {
+        const ok = archiveProject(projArchiveMatch[1]);
+        return json(res, ok ? 200 : 404, { success: ok });
+      }
+
+      const projConvMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/conversations$/i);
+      if (projConvMatch) {
+        const pid = projConvMatch[1];
+        if (method === 'GET') {
+          if (!getProject(pid)) return json(res, 404, { error: 'projeto nao encontrado' });
+          return json(res, 200, listProjectConversations(pid, { includeArchived: true }));
+        }
+        if (method === 'POST') return await handleCreateConversation(req, res, pid);
+      }
+
+      // --- Conversations (project-scoped) & runs ---
+      const convScopedMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
+      if (method === 'PATCH' && convScopedMatch) return await handlePatchConversation(req, res, convScopedMatch[1]);
+
+      const convMsgMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)\/messages$/);
+      if (method === 'POST' && convMsgMatch) return await handlePostMessage(req, res, convMsgMatch[1]);
+
+      const runEventsMatch = p.match(/^\/api\/runs\/([a-f0-9-]+)\/events$/);
+      if (method === 'GET' && runEventsMatch) {
+        const data = apiRunEvents(runEventsMatch[1], url.searchParams);
+        return data ? json(res, 200, data) : json(res, 404, { error: 'run nao encontrado' });
+      }
+
+      const runCancelMatch = p.match(/^\/api\/runs\/([a-f0-9-]+)\/cancel$/);
+      if (method === 'POST' && runCancelMatch) {
+        const ok = cancelRun(runCancelMatch[1]);
+        return json(res, ok ? 200 : 404, { success: ok });
+      }
 
       if (method === 'POST' && p === '/api/settings') return await handleSettings(req, res);
       if (method === 'POST' && p === '/api/confirm') return await handleConfirm(req, res);

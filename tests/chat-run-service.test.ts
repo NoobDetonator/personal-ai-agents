@@ -1,0 +1,162 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// ChatRunService com executor FAKE (sem LLM). Valida runs/run_events,
+// sequência, retomada, cancelamento, timeout e propagação de status.
+
+let connection: typeof import('../src/db/connection.js');
+let svc: typeof import('../src/projects/service.js');
+let convSvc: typeof import('../src/projects/conversation-service.js');
+let runHelpers: typeof import('../src/db/run-helpers.js');
+let runService: typeof import('../src/chat/run-service.js');
+
+let projectId: string;
+
+before(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'paa-run-'));
+  process.chdir(root);
+  connection = await import('../src/db/connection.js');
+  svc = await import('../src/projects/service.js');
+  convSvc = await import('../src/projects/conversation-service.js');
+  runHelpers = await import('../src/db/run-helpers.js');
+  runService = await import('../src/chat/run-service.js');
+  connection.initDatabase();
+  projectId = svc.createProject({ name: 'Chat' }).id;
+});
+
+after(() => connection.closeDatabase());
+
+function newConversation(): string {
+  return convSvc.createProjectConversation(projectId, 'aria', { title: 'teste' });
+}
+
+test('run bem-sucedido persiste mensagens, eventos ordenados e status done', async () => {
+  const conversationId = newConversation();
+  const { runId, done } = runService.startChatRun({
+    conversationId,
+    text: 'ola',
+    executor: async ({ handlers }) => {
+      handlers.onTextDelta('oi ');
+      handlers.onToolCall('readFile');
+      handlers.onTextDelta('pronto');
+      return { text: 'oi pronto', inputTokens: 10, outputTokens: 5, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
+    },
+  });
+
+  const status = await done;
+  assert.equal(status, 'done');
+
+  const run = runHelpers.getRun(runId)!;
+  assert.equal(run.status, 'done');
+  assert.equal(run.input_tokens, 10);
+  assert.equal(run.output_tokens, 5);
+
+  const events = runHelpers.listRunEvents(runId);
+  // sequência monotônica a partir de 1
+  assert.deepEqual(events.map(e => e.sequence), events.map((_, i) => i + 1));
+  const types = events.map(e => e.type);
+  assert.equal(types[0], 'status'); // running
+  assert.ok(types.includes('text_delta'));
+  assert.ok(types.includes('tool_start'));
+  assert.equal(types[types.length - 1], 'status'); // done
+
+  // mensagens do usuário e do assistente, ambas vinculadas ao run
+  const msgs = connection.getDb().prepare(
+    'SELECT role, content, run_id FROM messages WHERE conversation_id = ? ORDER BY sequence ASC',
+  ).all(conversationId) as Array<{ role: string; content: string; run_id: string }>;
+  assert.equal(msgs.length, 2);
+  assert.equal(msgs[0].role, 'user');
+  assert.equal(msgs[1].role, 'assistant');
+  assert.equal(msgs[1].content, 'oi pronto');
+  assert.equal(msgs[1].run_id, runId);
+});
+
+test('retomada: listRunEvents(after) devolve só a cauda após um sequence', async () => {
+  const conversationId = newConversation();
+  const { runId, done } = runService.startChatRun({
+    conversationId,
+    text: 'oi',
+    executor: async ({ handlers }) => {
+      handlers.onTextDelta('a');
+      handlers.onTextDelta('b');
+      handlers.onTextDelta('c');
+      return { text: 'abc', inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, toolCallCount: 0, finishReason: 'stop' };
+    },
+  });
+  await done;
+
+  const all = runHelpers.listRunEvents(runId);
+  const mid = all[Math.floor(all.length / 2)].sequence;
+  const tail = runHelpers.listRunEvents(runId, mid);
+  assert.ok(tail.length > 0);
+  assert.ok(tail.every(e => e.sequence > mid));
+  assert.equal(tail.length, all.length - all.filter(e => e.sequence <= mid).length);
+});
+
+test('cancelamento aborta o turno e marca cancelled (sem mensagem do assistente)', async () => {
+  const conversationId = newConversation();
+  const { runId, done } = runService.startChatRun({
+    conversationId,
+    text: 'trabalho longo',
+    executor: ({ abortSignal }) =>
+      new Promise((_, reject) => {
+        abortSignal.addEventListener('abort', () => reject(new Error('Chamada abortada (timeout ou cancelamento).')));
+      }),
+  });
+
+  assert.equal(runService.cancelRun(runId), true);
+  const status = await done;
+  assert.equal(status, 'cancelled');
+  assert.equal(runHelpers.getRun(runId)!.status, 'cancelled');
+
+  const assistantMsgs = connection.getDb().prepare(
+    "SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ? AND role = 'assistant'",
+  ).get(conversationId) as { c: number };
+  assert.equal(assistantMsgs.c, 0);
+});
+
+test('timeout vira status timed_out visível', async () => {
+  const conversationId = newConversation();
+  const { runId, done } = runService.startChatRun({
+    conversationId,
+    text: 'demora',
+    timeoutMs: 10,
+    executor: ({ abortSignal }) =>
+      new Promise((_, reject) => {
+        abortSignal.addEventListener('abort', () => reject(new Error('abortado')));
+      }),
+  });
+  const status = await done;
+  assert.equal(status, 'timed_out');
+  assert.equal(runHelpers.getRun(runId)!.status, 'timed_out');
+});
+
+test('erro do turno vira failed e NUNCA é sobrescrito para done', async () => {
+  const conversationId = newConversation();
+  const { runId, done } = runService.startChatRun({
+    conversationId,
+    text: 'quebra',
+    executor: async () => { throw new Error('boom'); },
+  });
+  const status = await done;
+  assert.equal(status, 'failed');
+
+  const run = runHelpers.getRun(runId)!;
+  assert.equal(run.status, 'failed');
+  assert.equal(run.error_message, 'boom');
+
+  // Tentar finalizar como done depois deve ser recusado (estado terminal).
+  const attempt = runHelpers.finishRun(runId, { status: 'done' });
+  assert.equal(attempt, 'failed');
+  assert.equal(runHelpers.getRun(runId)!.status, 'failed');
+
+  // setRunStatus também recusa sair de um estado terminal.
+  assert.equal(runHelpers.setRunStatus(runId, 'running'), false);
+});
+
+test('cancelRun em run inexistente/terminado retorna false', () => {
+  assert.equal(runService.cancelRun('nao-existe'), false);
+});
