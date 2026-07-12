@@ -5,6 +5,7 @@ import path from 'node:path';
 import { getConfig, getConfigPath } from '../config/loader.js';
 import { getSkillsDir } from '../skills/loader.js';
 import { askConfirmation } from '../chat/confirm.js';
+import { getProjectContext } from '../projects/context.js';
 
 // Extensions that are always blocked regardless of config (database files)
 const PROTECTED_EXTENSIONS = ['.db', '.db-journal', '.db-wal', '.db-shm'];
@@ -43,7 +44,14 @@ function samePath(a: string, b: string): boolean {
 
 function resolveWithinRoots(filePath: string, extraRoots: string[]): string | null {
   const config = getConfig();
-  const lexical = path.resolve(filePath);
+
+  // Dentro de um contexto de projeto, o confinamento é EXCLUSIVAMENTE o
+  // projectRoot (mais skills/ apenas em leitura); caminhos relativos resolvem
+  // contra o projectRoot. Fora de contexto (CLI legada, bootstrap), mantém o
+  // comportamento global baseado em config.fileOps.allowedPaths e no cwd.
+  const ctx = getProjectContext();
+  const base = ctx ? ctx.projectRoot : process.cwd();
+  const lexical = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(base, filePath);
 
   try {
     if (fs.existsSync(lexical) && fs.lstatSync(lexical).isSymbolicLink()) return null;
@@ -69,8 +77,10 @@ function resolveWithinRoots(filePath: string, extraRoots: string[]): string | nu
     if (PROTECTED_DIRS.some(dir => segments.includes(dir))) return null;
   }
 
-  const allowedRoots = [...config.fileOps.allowedPaths, ...extraRoots];
-  if (config.obsidian.vaultPath) allowedRoots.push(config.obsidian.vaultPath);
+  const allowedRoots = ctx
+    ? [ctx.projectRoot, ...extraRoots]
+    : [...config.fileOps.allowedPaths, ...extraRoots];
+  if (!ctx && config.obsidian.vaultPath) allowedRoots.push(config.obsidian.vaultPath);
 
   const allowed = allowedRoots.some(root => {
     const physicalRoot = canonicalizePath(root);

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { getConfig, updateConfig } from '../config/loader.js';
 import { getDb } from '../db/connection.js';
 import { askConfirmation } from '../chat/confirm.js';
+import { getProjectContext } from '../projects/context.js';
 
 const ROOT_DIR = process.cwd();
 const PHYSICAL_ROOT_DIR = fs.realpathSync.native(ROOT_DIR);
@@ -200,11 +201,17 @@ export function createShellTools(agentId: string) {
         return { error: 'Execucao de comandos esta desativada (shell.mode = "off" no config.json).' };
       }
 
-      // Working directory must stay inside the project (default: the team workspace)
+      // Confinamento do cwd. Com um contexto de projeto ativo, a raiz é o
+      // projectRoot (docs/adr/0002). Sem contexto (CLI legada), mantém a raiz
+      // do processo e o diretorio padrao baseado no team.
+      const ctx = getProjectContext();
       const team = config.agents[agentId]?.team;
-      const defaultDir = team ? path.join('workspace', team) : 'workspace';
-      const requestedWorkdir = path.resolve(ROOT_DIR, cwd ?? defaultDir);
-      const lexicalRel = path.relative(ROOT_DIR, requestedWorkdir);
+      const confineRoot = ctx ? ctx.projectRoot : ROOT_DIR;
+      const physicalConfineRoot = ctx ? (canonicalizePath(ctx.projectRoot) ?? confineRoot) : PHYSICAL_ROOT_DIR;
+      const defaultDir = ctx ? '.' : (team ? path.join('workspace', team) : 'workspace');
+
+      const requestedWorkdir = path.resolve(confineRoot, cwd ?? defaultDir);
+      const lexicalRel = path.relative(confineRoot, requestedWorkdir);
       if (lexicalRel.startsWith('..') || path.isAbsolute(lexicalRel)) {
         return { error: `Diretorio de trabalho fora do projeto: ${cwd}` };
       }
@@ -213,7 +220,7 @@ export function createShellTools(agentId: string) {
       if (!workdir) {
         return { error: `Nao foi possivel validar o diretorio de trabalho: ${cwd}` };
       }
-      const rel = path.relative(PHYSICAL_ROOT_DIR, workdir);
+      const rel = path.relative(physicalConfineRoot, workdir);
       if (rel.startsWith('..') || path.isAbsolute(rel)) {
         return { error: `Diretorio de trabalho aponta para fora do projeto: ${cwd}` };
       }

@@ -96,6 +96,12 @@ async function main(): Promise<void> {
     fs.mkdirSync(workspaceDir, { recursive: true });
   }
 
+  // 5c. Ensure the Legacy project (row created by the migration) has its
+  // directory. Legacy is the default isolation bucket for pre-project data and
+  // for the CLI until a project is explicitly selected.
+  const { ensureLegacyProject } = await import('./projects/service.js');
+  ensureLegacyProject();
+
   // 6. Discover and register agents
   initRegistry();
   console.log(chalk.gray('  Agentes registrados.'));
