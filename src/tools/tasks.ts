@@ -7,6 +7,7 @@ import { getConfig } from '../config/loader.js';
 import * as renderer from '../chat/renderer.js';
 import { emitBus } from '../web/bus.js';
 import { askConfirmation } from '../chat/confirm.js';
+import { getProjectContext } from '../projects/context.js';
 
 export interface TaskRow {
   id: string;
@@ -20,6 +21,7 @@ export interface TaskRow {
   team: string | null;
   created_at: string;
   updated_at: string;
+  project_id: string | null;
 }
 
 function shortId(): string {
@@ -37,13 +39,14 @@ interface ActiveDelegation {
   controller: AbortController;
   cancelled?: boolean;
   timedOut?: boolean;
+  projectId: string;
 }
 
 const activeDelegations = new Map<string, ActiveDelegation>();
 
-export function listActiveDelegations(): Array<{ id: string; from: string; to: string; taskId: string; startedAt: number }> {
-  return Array.from(activeDelegations.values()).map(({ id, from, to, taskId, startedAt }) => ({
-    id, from, to, taskId, startedAt,
+export function listActiveDelegations(): Array<{ id: string; from: string; to: string; taskId: string; startedAt: number; projectId: string }> {
+  return Array.from(activeDelegations.values()).map(({ id, from, to, taskId, startedAt, projectId }) => ({
+    id, from, to, taskId, startedAt, projectId,
   }));
 }
 
@@ -65,7 +68,7 @@ export function cancelDelegation(id: string): boolean {
   return true;
 }
 
-export function listTaskRows(status?: string, team?: string): TaskRow[] {
+export function listTaskRows(status?: string, team?: string, projectId?: string): TaskRow[] {
   const db = getDb();
   const where: string[] = [];
   const params: string[] = [];
@@ -77,15 +80,20 @@ export function listTaskRows(status?: string, team?: string): TaskRow[] {
     where.push('team = ?');
     params.push(team);
   }
+  if (projectId) {
+    where.push("COALESCE(project_id, 'legacy') = ?");
+    params.push(projectId);
+  }
   const sql = `SELECT * FROM tasks ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at ASC`;
   return db.prepare(sql).all(...params) as TaskRow[];
 }
 
-function setTaskStatus(taskId: string, status: string, result?: string): boolean {
+function setTaskStatus(taskId: string, status: string, result?: string, projectId?: string): boolean {
   const db = getDb();
+  const scope = projectId ? " AND COALESCE(project_id, 'legacy') = ?" : '';
   const info = db.prepare(
-    "UPDATE tasks SET status = ?, result = COALESCE(?, result), updated_at = datetime('now') WHERE id = ?"
-  ).run(status, result ?? null, taskId);
+    "UPDATE tasks SET status = ?, result = COALESCE(?, result), updated_at = datetime('now') WHERE id = ?" + scope
+  ).run(status, result ?? null, taskId, ...(projectId ? [projectId] : []));
   return info.changes > 0;
 }
 
@@ -116,6 +124,7 @@ async function delegateToAgent(
   }
 
   const config = getConfig();
+  const projectId = getProjectContext()?.projectId ?? 'legacy';
 
   // Toda delegacao vira uma task no board (rastreio automatico, sem depender
   // do modelo lembrar de chamar createTask)
@@ -125,10 +134,10 @@ async function delegateToAgent(
     const title = prompt.split('\n')[0].trim().slice(0, 60);
     const team = config.agents[agentId]?.team ?? config.agents[createdBy]?.team ?? null;
     getDb().prepare(
-      'INSERT INTO tasks (id, parent_id, title, description, assignee, status, created_by, team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(boardTaskId, null, title, prompt.slice(0, 300), agentId, 'in_progress', createdBy, team);
+      'INSERT INTO tasks (id, parent_id, title, description, assignee, status, created_by, team, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(boardTaskId, null, title, prompt.slice(0, 300), agentId, 'in_progress', createdBy, team, projectId);
   } else {
-    setTaskStatus(boardTaskId, 'in_progress');
+    setTaskStatus(boardTaskId, 'in_progress', undefined, projectId);
   }
 
   const delegation: ActiveDelegation = {
@@ -138,6 +147,7 @@ async function delegateToAgent(
     taskId: boardTaskId,
     startedAt: Date.now(),
     controller: new AbortController(),
+    projectId,
   };
   activeDelegations.set(delegation.id, delegation);
   emitBus('delegation', { id: delegation.id, from: createdBy, to: agentId, taskId: boardTaskId, agentName: target.name, status: 'start' });
@@ -166,20 +176,20 @@ async function delegateToAgent(
         'So reporte como concluido o que voce verificou; se algo ficou faltando, diga exatamente o que falta.',
     });
 
-    setTaskStatus(boardTaskId, 'done', response);
+    setTaskStatus(boardTaskId, 'done', response, projectId);
     renderer.renderSystemMessage(`✓ ${target.name} concluiu [${boardTaskId}].`);
     emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'done' });
     return { agentId, taskId: boardTaskId, response };
   } catch (error) {
     if (delegation.controller.signal.aborted && delegation.cancelled) {
-      setTaskStatus(boardTaskId, 'cancelled', 'Cancelada pelo usuario via painel');
+      setTaskStatus(boardTaskId, 'cancelled', 'Cancelada pelo usuario via painel', projectId);
       renderer.renderSystemMessage(`⊘ Delegacao para ${target.name} cancelada pelo usuario [${boardTaskId}].`);
       emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'cancelled' });
       return { agentId, taskId: boardTaskId, error: 'Delegacao CANCELADA pelo usuario. Nao repita sem confirmar com ele.' };
     }
 
     if (delegation.controller.signal.aborted && delegation.timedOut) {
-      setTaskStatus(boardTaskId, 'failed', `Timeout apos ${timeoutSec}s`);
+      setTaskStatus(boardTaskId, 'failed', `Timeout apos ${timeoutSec}s`, projectId);
       renderer.renderSystemMessage(`✗ ${target.name} excedeu ${timeoutSec}s e foi interrompido [${boardTaskId}].`);
       emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'failed' });
       return {
@@ -190,7 +200,7 @@ async function delegateToAgent(
     }
 
     const msg = error instanceof Error ? error.message : 'erro desconhecido';
-    setTaskStatus(boardTaskId, 'failed', msg);
+    setTaskStatus(boardTaskId, 'failed', msg, projectId);
     renderer.renderSystemMessage(`✗ ${target.name} falhou [${boardTaskId}]: ${msg}`);
     emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'failed' });
     return { agentId, taskId: boardTaskId, error: msg };
@@ -237,10 +247,11 @@ export function createTaskTools(agentId: string): ToolSet {
         team ??
         config.agents[agentId]?.team ??
         (assignee ? config.agents[assignee]?.team ?? null : null);
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
       db.prepare(
-        'INSERT INTO tasks (id, parent_id, title, description, assignee, status, created_by, team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, parentId ?? null, title, description ?? null, assignee ?? null, 'pending', agentId, resolvedTeam);
-      return { success: true, taskId: id, team: resolvedTeam };
+        'INSERT INTO tasks (id, parent_id, title, description, assignee, status, created_by, team, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, parentId ?? null, title, description ?? null, assignee ?? null, 'pending', agentId, resolvedTeam, projectId);
+      return { success: true, taskId: id, team: resolvedTeam, projectId };
     },
   });
 
@@ -251,7 +262,7 @@ export function createTaskTools(agentId: string): ToolSet {
       team: z.string().optional().describe('Filtrar por equipe'),
     }),
     execute: async ({ status, team }) => {
-      const tasks = listTaskRows(status, team).map(t => ({
+      const tasks = listTaskRows(status, team, getProjectContext()?.projectId ?? 'legacy').map(t => ({
         id: t.id,
         title: t.title,
         assignee: t.assignee,
@@ -271,8 +282,9 @@ export function createTaskTools(agentId: string): ToolSet {
       result: z.string().optional().describe('Resultado ou motivo (opcional)'),
     }),
     execute: async ({ taskId, status, result }) => {
-      const ok = setTaskStatus(taskId, status, result);
-      if (!ok) return { error: `Tarefa "${taskId}" nao encontrada.` };
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const ok = setTaskStatus(taskId, status, result, projectId);
+      if (!ok) return { error: `Tarefa "${taskId}" nao encontrada neste projeto.` };
       return { success: true, taskId, status };
     },
   });
@@ -299,7 +311,8 @@ export function createTaskTools(agentId: string): ToolSet {
       if (listActiveDelegations().some(item => item.taskId === taskId)) {
         return { error: `Tarefa "${taskId}" esta em execucao e nao pode ser deletada. Cancele a delegacao primeiro.` };
       }
-      const info = getDb().prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const info = getDb().prepare("DELETE FROM tasks WHERE id = ? AND COALESCE(project_id, 'legacy') = ?").run(taskId, projectId);
       if (info.changes === 0) return { error: `Tarefa "${taskId}" nao encontrada.` };
       emitBus('board_changed', { taskId, action: 'deleted' });
       return { success: true, taskId };
@@ -313,7 +326,8 @@ export function createTaskTools(agentId: string): ToolSet {
       team: z.string().optional().describe('So apagar tarefas dessa equipe'),
     }),
     execute: async ({ status, team }) => {
-      const initialRows = listTaskRows(status, team);
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const initialRows = listTaskRows(status, team, projectId);
       const initial = partitionTasksForDeletion(
         initialRows,
         listActiveDelegations().map(item => item.taskId),
@@ -343,7 +357,7 @@ export function createTaskTools(agentId: string): ToolSet {
 
       // Recalcula depois da confirmacao: uma tarefa pode ter iniciado enquanto
       // a decisao humana estava pendente.
-      const rows = listTaskRows(status, team);
+      const rows = listTaskRows(status, team, projectId);
       const { deletableIds, skippedActive } = partitionTasksForDeletion(
         rows,
         listActiveDelegations().map(item => item.taskId),

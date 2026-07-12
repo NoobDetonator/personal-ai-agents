@@ -12,6 +12,7 @@ let svc: typeof import('../src/projects/service.js');
 let convSvc: typeof import('../src/projects/conversation-service.js');
 let runHelpers: typeof import('../src/db/run-helpers.js');
 let runService: typeof import('../src/chat/run-service.js');
+let confirm: typeof import('../src/chat/confirm.js');
 
 let projectId: string;
 
@@ -23,6 +24,7 @@ before(async () => {
   convSvc = await import('../src/projects/conversation-service.js');
   runHelpers = await import('../src/db/run-helpers.js');
   runService = await import('../src/chat/run-service.js');
+  confirm = await import('../src/chat/confirm.js');
   connection.initDatabase();
   projectId = svc.createProject({ name: 'Chat' }).id;
 });
@@ -41,6 +43,7 @@ test('run bem-sucedido persiste mensagens, eventos ordenados e status done', asy
     executor: async ({ handlers }) => {
       handlers.onTextDelta('oi ');
       handlers.onToolCall('readFile');
+      handlers.onToolResult?.('readFile', { ok: true });
       handlers.onTextDelta('pronto');
       return { text: 'oi pronto', inputTokens: 10, outputTokens: 5, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
     },
@@ -61,6 +64,7 @@ test('run bem-sucedido persiste mensagens, eventos ordenados e status done', asy
   assert.equal(types[0], 'status'); // running
   assert.ok(types.includes('text_delta'));
   assert.ok(types.includes('tool_start'));
+  assert.ok(types.includes('tool_result'));
   assert.equal(types[types.length - 1], 'status'); // done
 
   // mensagens do usuário e do assistente, ambas vinculadas ao run
@@ -159,4 +163,63 @@ test('erro do turno vira failed e NUNCA é sobrescrito para done', async () => {
 
 test('cancelRun em run inexistente/terminado retorna false', () => {
   assert.equal(runService.cancelRun('nao-existe'), false);
+});
+
+
+test('recusa dois runs simultaneos na mesma conversa', async () => {
+  const conversationId = newConversation();
+  const first = runService.startChatRun({
+    conversationId,
+    text: 'primeiro',
+    executor: ({ abortSignal }) => new Promise((_, reject) => {
+      abortSignal.addEventListener('abort', () => reject(new Error('abortado')));
+    }),
+  });
+
+  assert.throws(
+    () => runService.startChatRun({
+      conversationId,
+      text: 'segundo',
+      executor: async () => ({ text: '', inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, toolCallCount: 0, finishReason: 'stop' }),
+    }),
+    /execucao ativa/,
+  );
+
+  assert.equal(runService.cancelRun(first.runId), true);
+  assert.equal(await first.done, 'cancelled');
+});
+
+test('recuperacao apos reinicio encerra runs orfaos como failed', () => {
+  const conversationId = newConversation();
+  const runId = runHelpers.createRun({ projectId, conversationId, agentId: 'aria' });
+  assert.equal(runHelpers.recoverInterruptedRuns(), 1);
+  const run = runHelpers.getRun(runId)!;
+  assert.equal(run.status, 'failed');
+  assert.equal(run.error_code, 'process_restarted');
+  assert.ok(runHelpers.listRunEvents(runId).some(event => event.type === 'error'));
+});
+
+
+test('confirmacao fica vinculada ao projeto, conversa e run', async () => {
+  const conversationId = newConversation();
+  let observedStatus = '';
+  const started = runService.startChatRun({
+    conversationId,
+    text: 'acao sensivel',
+    executor: async () => {
+      const answer = confirm.askConfirmation('autorizar teste', { allowAlways: false });
+      const pending = confirm.getPendingConfirmations().find(item => item.message === 'autorizar teste');
+      assert.ok(pending);
+      assert.equal(pending.projectId, projectId);
+      assert.equal(pending.conversationId, conversationId);
+      assert.ok(pending.runId);
+      observedStatus = runHelpers.getRun(pending.runId!)?.status ?? '';
+      confirm.resolveConfirmation(pending.id, 'yes');
+      assert.equal((await answer).answer, 'yes');
+      return { text: 'autorizado', inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
+    },
+  });
+  assert.equal(await started.done, 'done');
+  assert.equal(observedStatus, 'waiting_confirmation');
+  assert.ok(runHelpers.listRunEvents(started.runId).some(event => event.type === 'confirmation'));
 });

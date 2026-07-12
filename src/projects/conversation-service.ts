@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
 import { LEGACY_PROJECT_ID } from '../db/schema.js';
+import { isAgentAssignedToProject } from './service.js';
 
 // Conversas escopadas por projeto (ADR 0003). Complementa
 // db/conversation-helpers.ts (usado pela CLI legada) sem substituí-lo.
@@ -23,6 +24,9 @@ export function createProjectConversation(
   agentId: string,
   opts?: { title?: string; createdBy?: string },
 ): string {
+  if (projectId !== LEGACY_PROJECT_ID && !isAgentAssignedToProject(projectId, agentId)) {
+    throw new Error('Agente ' + agentId + ' nao pertence a este projeto.');
+  }
   const db = getDb();
   const id = randomUUID();
   db.prepare(

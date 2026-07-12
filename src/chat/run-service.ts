@@ -3,7 +3,7 @@ import { getConfig } from '../config/loader.js';
 import { getAgent } from '../agents/registry.js';
 import { loadConversationById } from '../db/conversation-helpers.js';
 import {
-  createRun,
+  createRunIfConversationIdle,
   appendRunEvent,
   finishRun,
   setRunStatus,
@@ -17,6 +17,7 @@ import {
 import { buildProjectContext } from '../projects/service.js';
 import { runWithProjectContext } from '../projects/context.js';
 import { emitBus } from '../web/bus.js';
+import { recallRelevantMemories } from '../agents/recall.js';
 
 // ChatRunService: orquestra um turno de chat como um Run, independente da CLI
 // (sem readline nem renderer de terminal). Persiste run_events para retomada e
@@ -25,6 +26,8 @@ import { emitBus } from '../web/bus.js';
 export interface TurnHandlers {
   onTextDelta: (text: string) => void;
   onToolCall: (toolName: string) => void;
+  onToolResult?: (toolName: string, output: unknown) => void;
+  onGuardRetry?: (reason: 'unfinished' | 'fabrication') => void;
 }
 
 export interface TurnOutcome {
@@ -64,10 +67,18 @@ const activeRuns = new Map<string, AbortController>();
 const defaultExecutor: TurnExecutor = async ({ agentId, messages, handlers, abortSignal }) => {
   const agent = getAgent(agentId);
   if (!agent) throw new Error(`Agente não encontrado: ${agentId}`);
-  return agent.chatStream(
+  const lastUser = [...messages].reverse().find(message => message.role === 'user');
+  const raw = typeof lastUser?.content === 'string' ? lastUser.content : '';
+  const contextData = raw ? await recallRelevantMemories(agentId, raw) : null;
+  return agent.runGuardedTurn(
     messages,
-    { onTextDelta: handlers.onTextDelta, onToolCall: handlers.onToolCall },
-    { abortSignal },
+    {
+      onTextDelta: handlers.onTextDelta,
+      onToolCall: handlers.onToolCall,
+      onToolResult: handlers.onToolResult,
+      onGuardRetry: handlers.onGuardRetry,
+    },
+    { abortSignal, contextData: contextData ?? undefined },
   );
 };
 
@@ -92,12 +103,20 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
     throw new Error(`Conversa não encontrada: ${input.conversationId}`);
   }
 
-  const runId = createRun({
-    projectId: ctx.projectId,
-    conversationId: input.conversationId,
-    agentId: ctx.agentId,
-    kind: 'chat',
-  });
+  let runId: string;
+  try {
+    runId = createRunIfConversationIdle({
+      projectId: ctx.projectId,
+      conversationId: input.conversationId,
+      agentId: ctx.agentId,
+      kind: 'chat',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'RUN_ALREADY_ACTIVE') {
+      throw new Error('Ja existe uma execucao ativa nesta conversa.');
+    }
+    throw error;
+  }
 
   saveRunMessage({
     conversationId: input.conversationId,
@@ -152,6 +171,21 @@ async function executeRun(
       onToolCall: (toolName) => {
         const seq = appendRunEvent(runId, 'tool_start', { tool: toolName });
         emitBus('tool_call', { agentId, toolName, projectId, conversationId, runId, seq });
+      },
+      onToolResult: (toolName, output) => {
+        let result: unknown = output;
+        try {
+          const encoded = JSON.stringify(output);
+          result = encoded.length > 8000 ? encoded.slice(0, 8000) + '...[truncado]' : output;
+        } catch {
+          result = String(output);
+        }
+        const seq = appendRunEvent(runId, 'tool_result', { tool: toolName, result });
+        emitBus('tool_result', { agentId, toolName, result, projectId, conversationId, runId, seq });
+      },
+      onGuardRetry: (reason) => {
+        const seq = appendRunEvent(runId, 'status', { status: 'retrying', reason });
+        emitBus(reason === 'fabrication' ? 'stream_reset' : 'stream_continue', { agentId, reason, projectId, conversationId, runId, seq });
       },
     };
 

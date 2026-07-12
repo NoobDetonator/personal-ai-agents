@@ -30,6 +30,7 @@ import {
   updateProject,
   archiveProject,
   deleteProject,
+  assignAgentToProject,
 } from '../projects/service.js';
 import {
   listProjectConversations,
@@ -288,15 +289,23 @@ function apiAnalytics(params: URLSearchParams): unknown {
   });
 }
 
-function apiConversation(id: string): unknown {
+function apiConversation(id: string): unknown | null {
   const db = getDb();
   const meta = db.prepare(
     `SELECT id, project_id, agent_id, title, archived, pinned, last_run_status FROM conversations WHERE id = ?`
   ).get(id) as Record<string, unknown> | undefined;
 
+  if (!meta) return null;
+
   const messages = db.prepare(
-    `SELECT role, content, agent_id, run_id, sequence, status, input_tokens, output_tokens, created_at
+    `SELECT role, content, agent_id, run_id, sequence, status, metadata_json, input_tokens, output_tokens, created_at
      FROM messages WHERE conversation_id = ? ORDER BY sequence ASC, created_at ASC LIMIT 300`
+  ).all(id);
+  const runEvents = db.prepare(
+    `SELECT e.run_id, e.sequence, e.type, e.payload_json
+     FROM run_events e JOIN runs r ON r.id = e.run_id
+     WHERE r.conversation_id = ? AND e.type IN ('tool_start', 'tool_result')
+     ORDER BY e.run_id, e.sequence`,
   ).all(id);
 
   // Run em andamento: devolve seus eventos para reconstruir a bolha parcial
@@ -306,7 +315,7 @@ function apiConversation(id: string): unknown {
     ? { id: latest.id, status: latest.status, agentId: latest.agent_id, events: listRunEvents(latest.id) }
     : null;
 
-  return { id, meta: meta ?? null, messages, activeRun };
+  return { id, meta, messages, runEvents, activeRun };
 }
 
 function apiGroups(): unknown {
@@ -393,11 +402,23 @@ async function handleCreateProject(req: http.IncomingMessage, res: http.ServerRe
   });
 
   let conversationId: string | null = null;
-  if (body.createInitialConversation) {
-    conversationId = createProjectConversation(project.id, getConfig().defaultAgent, {
-      title: 'Conversa inicial',
-      createdBy: 'web',
-    });
+  try {
+    if (body.createInitialConversation) {
+      const defaultAgent = getConfig().defaultAgent;
+      const defaultConfig = getConfig().agents[defaultAgent];
+      if (!defaultConfig) throw new Error('Agente padrao nao encontrado.');
+      assignAgentToProject(project.id, defaultAgent, {
+        role: defaultConfig.role ?? null,
+        team: defaultConfig.team ?? null,
+      });
+      conversationId = createProjectConversation(project.id, defaultAgent, {
+        title: 'Conversa inicial',
+        createdBy: 'web',
+      });
+    }
+  } catch (error) {
+    deleteProject(project.id, project.name);
+    throw error;
   }
   json(res, 201, { project, conversationId });
 }
@@ -426,6 +447,12 @@ async function handleCreateConversation(req: http.IncomingMessage, res: http.Ser
   const body = await readBody(req);
   const agentId = body.agentId != null ? String(body.agentId) : getConfig().defaultAgent;
   if (!/^[a-z0-9_-]+$/i.test(agentId)) throw new HttpError(400, 'agentId invalido');
+  const agentConfig = getConfig().agents[agentId];
+  if (!agentConfig) throw new HttpError(404, 'agente nao encontrado');
+  assignAgentToProject(projectId, agentId, {
+    role: agentConfig.role ?? null,
+    team: agentConfig.team ?? null,
+  });
   const conversationId = createProjectConversation(projectId, agentId, {
     title: body.title != null ? String(body.title) : undefined,
     createdBy: 'web',
@@ -451,7 +478,8 @@ async function handlePostMessage(req: http.IncomingMessage, res: http.ServerResp
     const { runId } = startChatRun({ conversationId, text });
     json(res, 202, { runId });
   } catch (error) {
-    json(res, 404, { error: error instanceof Error ? error.message : 'conversa nao encontrada' });
+    const message = error instanceof Error ? error.message : 'falha ao iniciar execucao';
+    json(res, message.includes('execucao ativa') ? 409 : 404, { error: message });
   }
 }
 
@@ -589,7 +617,10 @@ export function startWebServer(): void {
       }
 
       const convMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
-      if (method === 'GET' && convMatch) return json(res, 200, apiConversation(convMatch[1]));
+      if (method === 'GET' && convMatch) {
+        const conversation = apiConversation(convMatch[1]);
+        return conversation ? json(res, 200, conversation) : json(res, 404, { error: 'conversa nao encontrada' });
+      }
 
       // --- Projects ---
       if (method === 'GET' && p === '/api/projects') return json(res, 200, apiProjects(url.searchParams));

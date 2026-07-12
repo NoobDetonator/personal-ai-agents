@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
+import { getProjectContext } from '../projects/context.js';
 
 // Precos por 1M de tokens (USD), da doc oficial de cada provedor.
 // Modelos fora da tabela: custo nao estimado (mostra so tokens).
@@ -62,8 +63,8 @@ export function addUsage(input: number, output: number, cached: number, modelId:
   // ex.: testes que usam addUsage sem banco inicializado).
   try {
     getDb().prepare(
-      `INSERT INTO usage_events (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, cost_usd, duration_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO usage_events (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, cost_usd, duration_ms, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       randomUUID(),
       meta?.agentId ?? null,
@@ -74,6 +75,7 @@ export function addUsage(input: number, output: number, cached: number, modelId:
       cached,
       callCost,
       meta?.durationMs ?? null,
+      getProjectContext()?.projectId ?? 'legacy',
     );
   } catch {
     // sem banco: mantem apenas os contadores de sessao

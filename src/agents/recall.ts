@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { generateText } from 'ai';
 import { parseFrontmatter } from '../skills/loader.js';
-import { getMemoriesDir, readDeepMemoryFile } from './personality.js';
+import { getScopedMemoriesDir, readScopedDeepMemory } from '../projects/agent-memory.js';
 import { getSideQueryModel } from './agent.js';
 import { addUsage } from './usage.js';
 import { getConfig } from '../config/loader.js';
@@ -16,7 +16,7 @@ const RECALL_TIMEOUT_MS = 10_000;
 const MAX_SELECTED = 3;
 
 export function scanMemories(agentId: string): MemoryManifestEntry[] {
-  const dir = getMemoriesDir(agentId);
+  const dir = getScopedMemoriesDir(agentId);
   if (!fs.existsSync(dir)) return [];
 
   const entries: MemoryManifestEntry[] = [];
@@ -87,7 +87,7 @@ export async function recallRelevantMemories(agentId: string, userMessage: strin
 
   const parts: string[] = [];
   for (const slug of slugs) {
-    const content = readDeepMemoryFile(agentId, slug);
+    const content = readScopedDeepMemory(agentId, slug);
     if (content) {
       parts.push(`## ${slug}\n${content}`);
     }

@@ -1,6 +1,15 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { readMemory, appendToMemorySection, readSoul, appendDailyNote, readDailyNote, saveDeepMemoryFile, readDeepMemoryFile } from '../agents/personality.js';
+import { readSoul } from '../agents/personality.js';
+import {
+  appendScopedDailyNote,
+  appendScopedMemorySection,
+  readScopedDailyNote,
+  readScopedDeepMemory,
+  readScopedMemory,
+  saveScopedDeepMemory,
+} from '../projects/agent-memory.js';
+import { getProjectContext } from '../projects/context.js';
 import { summarizeMemoryIfNeeded } from '../agents/memory-summarizer.js';
 import { appendToUserProfile, PROFILE_SECTIONS } from '../agents/user-profile.js';
 import { getConfig, updateAgentInConfig, updateConfig } from '../config/loader.js';
@@ -12,7 +21,7 @@ export function createMemoryTools(agentId: string) {
     description: 'Ler seu arquivo de memoria para lembrar de informacoes passadas',
     inputSchema: z.object({}),
     execute: async () => {
-      const memory = readMemory(agentId);
+      const memory = readScopedMemory(agentId);
       return { memory: memory || '(Memoria vazia)' };
     },
   });
@@ -25,9 +34,9 @@ export function createMemoryTools(agentId: string) {
       content: z.string().describe('O que lembrar (uma frase curta e clara)'),
     }),
     execute: async ({ section, content }) => {
-      appendToMemorySection(agentId, section, content);
+      appendScopedMemorySection(agentId, section, content);
       // Fire-and-forget: summarize if memory exceeds threshold
-      summarizeMemoryIfNeeded(agentId).catch(() => {});
+      if (!getProjectContext()) summarizeMemoryIfNeeded(agentId).catch(() => {});
       return { success: true, message: `Salvo em "${section}": ${content}` };
     },
   });
@@ -77,7 +86,7 @@ export function createMemoryTools(agentId: string) {
       content: z.string().describe('O que registrar (uma frase objetiva)'),
     }),
     execute: async ({ content }) => {
-      appendDailyNote(agentId, content);
+      appendScopedDailyNote(agentId, content);
       return { success: true };
     },
   });
@@ -88,7 +97,7 @@ export function createMemoryTools(agentId: string) {
       date: z.string().optional().describe('Data no formato YYYY-MM-DD (padrao: hoje)'),
     }),
     execute: async ({ date }) => {
-      const note = readDailyNote(agentId, date);
+      const note = readScopedDailyNote(agentId, date);
       return { note: note || '(Sem nota para essa data)' };
     },
   });
@@ -130,7 +139,7 @@ export function createMemoryTools(agentId: string) {
     }),
     execute: async ({ slug, description, content }) => {
       try {
-        const saved = saveDeepMemoryFile(agentId, slug, description, content);
+        const saved = saveScopedDeepMemory(agentId, slug, description, content);
         return { success: true, slug: saved };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'Erro ao salvar memoria' };
@@ -144,7 +153,7 @@ export function createMemoryTools(agentId: string) {
       slug: z.string().describe('Slug da memoria'),
     }),
     execute: async ({ slug }) => {
-      const content = readDeepMemoryFile(agentId, slug);
+      const content = readScopedDeepMemory(agentId, slug);
       return content ? { content } : { error: `Memoria "${slug}" nao encontrada.` };
     },
   });

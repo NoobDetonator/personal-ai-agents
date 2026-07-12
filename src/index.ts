@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import { loadConfig, updateConfig, getConfig } from './config/loader.js';
 import { startConfigWatcher, stopConfigWatcher } from './config/watcher.js';
 import { initDatabase, closeDatabase } from './db/connection.js';
+import { recoverInterruptedRuns } from './db/run-helpers.js';
 import { initRegistry } from './agents/registry.js';
 import { loadSkills, startSkillsWatcher, stopSkillsWatcher, listSkillMetas } from './skills/loader.js';
 import { startScheduler, stopScheduler, getActiveTaskCount } from './scheduler/engine.js';
@@ -88,7 +89,11 @@ async function main(): Promise<void> {
 
   // 5. Initialize database
   initDatabase();
+  const recoveredRuns = recoverInterruptedRuns();
   console.log(chalk.gray('  Banco de dados inicializado.'));
+  if (recoveredRuns > 0) {
+    console.log(chalk.yellow('  ' + recoveredRuns + ' execucao(oes) interrompida(s) pelo reinicio foram encerradas com falha.'));
+  }
 
   // 5b. Ensure agent workspace directory exists
   const workspaceDir = path.join(process.cwd(), 'workspace');

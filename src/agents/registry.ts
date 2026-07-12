@@ -3,6 +3,8 @@ import { createAgentFiles, deleteAgentFiles, discoverAgents } from './personalit
 import type { AgentConfig, AgentRole } from '../config/defaults.js';
 import { Agent } from './agent.js';
 import { validateSoulText } from './prompt-composer.js';
+import { getProjectContext } from '../projects/context.js';
+import { assignAgentToProject, removeAgentFromProjects } from '../projects/service.js';
 
 const agents = new Map<string, Agent>();
 
@@ -167,6 +169,8 @@ export function createAgent(agentId: string, opts: CreateAgentOptions = {}): Age
 
   const agent = new Agent(id);
   agents.set(id, agent);
+  const project = getProjectContext();
+  if (project) assignAgentToProject(project.projectId, id, { role: opts.role ?? 'worker', team: opts.team ?? null });
   return agent;
 }
 
@@ -195,6 +199,7 @@ export function deleteAgent(agentId: string, requesterId?: string): void {
   }
 
   agents.delete(agentId);
+  removeAgentFromProjects(agentId);
   deleteAgentFiles(agentId);
   removeAgentFromConfig(agentId);
 }

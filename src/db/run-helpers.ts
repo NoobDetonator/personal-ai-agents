@@ -88,6 +88,46 @@ export function createRun(input: CreateRunInput): string {
   return id;
 }
 
+export function getActiveRunForConversation(conversationId: string): Run | null {
+  const row = getDb().prepare(
+    `SELECT * FROM runs
+     WHERE conversation_id = ? AND status IN ('queued', 'running', 'waiting_confirmation')
+     ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+  ).get(conversationId) as Record<string, unknown> | undefined;
+  return row ? (row as unknown as Run) : null;
+}
+
+export function createRunIfConversationIdle(input: CreateRunInput): string {
+  const db = getDb();
+  return db.transaction(() => {
+    if (input.conversationId && getActiveRunForConversation(input.conversationId)) {
+      throw new Error('RUN_ALREADY_ACTIVE');
+    }
+    return createRun(input);
+  })();
+}
+
+/** Finaliza runs que ficaram ativos apos reinicio inesperado do processo. */
+export function recoverInterruptedRuns(): number {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT id FROM runs WHERE status IN ('queued', 'running', 'waiting_confirmation')`,
+  ).all() as Array<{ id: string }>;
+  for (const row of rows) {
+    appendRunEvent(row.id, 'error', {
+      status: 'failed',
+      code: 'process_restarted',
+      message: 'Execucao interrompida porque o processo foi reiniciado.',
+    });
+    finishRun(row.id, {
+      status: 'failed',
+      errorCode: 'process_restarted',
+      errorMessage: 'Execucao interrompida porque o processo foi reiniciado.',
+    });
+  }
+  return rows.length;
+}
+
 export function getRun(runId: string): Run | null {
   const row = getDb().prepare('SELECT * FROM runs WHERE id = ?').get(runId) as Record<string, unknown> | undefined;
   return row ? (row as unknown as Run) : null;

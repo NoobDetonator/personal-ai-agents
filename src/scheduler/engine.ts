@@ -11,6 +11,7 @@ interface ScheduleRow {
   enabled: number;
   last_run: string | null;
   created_at: string;
+  project_id: string | null;
 }
 
 const activeTasks = new Map<string, cron.ScheduledTask>();
@@ -51,7 +52,7 @@ export function registerCronJob(schedule: ScheduleRow): void {
     }
     runningTasks.add(schedule.id);
     try {
-      await executeScheduledTask(schedule.id, schedule.agent_id, schedule.task_prompt);
+      await executeScheduledTask(schedule.id, schedule.agent_id, schedule.task_prompt, schedule.project_id ?? 'legacy');
 
       const db = getDb();
       db.prepare("UPDATE schedules SET last_run = datetime('now') WHERE id = ?").run(schedule.id);

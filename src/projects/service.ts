@@ -136,13 +136,17 @@ export function createProject(input: CreateProjectInput): Project {
       `INSERT INTO project_settings (project_id, default_model, default_provider)
        VALUES (?, ?, ?)`,
     ).run(id, input.defaultModel ?? null, input.defaultProvider ?? null);
+    db.prepare(
+      `INSERT INTO project_agents (project_id, agent_id, role, enabled)
+       VALUES (?, 'aria', 'principal', 1)`,
+    ).run(id);
   });
 
   try {
     insert();
     const project = getProject(id)!;
-    ensureProjectDirectories(project);
     dirCreated = true;
+    ensureProjectDirectories(project);
     fs.writeFileSync(
       path.join(projectDir, 'project.json'),
       JSON.stringify({ id, name, slug, description: input.description ?? null, root_path: rootPath }, null, 2),
@@ -159,6 +163,32 @@ export function createProject(input: CreateProjectInput): Project {
     }
     throw new Error(`Falha ao criar projeto "${name}": ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+export function assignAgentToProject(
+  projectId: string,
+  agentId: string,
+  opts?: { role?: string | null; team?: string | null },
+): void {
+  if (!getProject(projectId)) throw new Error('Projeto nao encontrado.');
+  getDb().prepare(
+    `INSERT INTO project_agents (project_id, agent_id, role, team, enabled)
+     VALUES (?, ?, ?, ?, 1)
+     ON CONFLICT(project_id, agent_id) DO UPDATE SET
+       role = COALESCE(excluded.role, project_agents.role),
+       team = COALESCE(excluded.team, project_agents.team),
+       enabled = 1`,
+  ).run(projectId, agentId, opts?.role ?? null, opts?.team ?? null);
+}
+
+export function isAgentAssignedToProject(projectId: string, agentId: string): boolean {
+  return !!getDb().prepare(
+    'SELECT 1 FROM project_agents WHERE project_id = ? AND agent_id = ? AND enabled = 1',
+  ).get(projectId, agentId);
+}
+
+export function removeAgentFromProjects(agentId: string): void {
+  getDb().prepare('DELETE FROM project_agents WHERE agent_id = ?').run(agentId);
 }
 
 export function updateProject(
@@ -188,19 +218,69 @@ export function archiveProject(id: string): boolean {
  * nunca pode ser deletado. Remove diretório do projeto (exceto Legacy, cujo
  * root é o workspace inteiro).
  */
-export function deleteProject(id: string, confirmName: string): { ok: boolean; error?: string } {
+export function deleteProject(id: string, confirmName: string): { ok: boolean; error?: string; warning?: string } {
   if (id === LEGACY_PROJECT_ID) {
-    return { ok: false, error: 'O projeto Legacy não pode ser deletado.' };
+    return { ok: false, error: 'O projeto Legacy nao pode ser deletado.' };
   }
   const project = getProject(id);
-  if (!project) return { ok: false, error: 'Projeto não encontrado.' };
+  if (!project) return { ok: false, error: 'Projeto nao encontrado.' };
   if (confirmName !== project.name) {
-    return { ok: false, error: 'Confirmação inválida: digite o nome exato do projeto.' };
+    return { ok: false, error: 'Confirmacao invalida: digite o nome exato do projeto.' };
   }
-  getDb().prepare('DELETE FROM projects WHERE id = ?').run(id);
+
+  const db = getDb();
+  const activeRun = db.prepare(
+    `SELECT 1 FROM runs WHERE project_id = ? AND status IN ('queued', 'running', 'waiting_confirmation') LIMIT 1`,
+  ).get(id);
+  const activeTask = db.prepare(
+    `SELECT 1 FROM tasks WHERE project_id = ? AND status = 'in_progress' LIMIT 1`,
+  ).get(id);
+  if (activeRun || activeTask) {
+    return { ok: false, error: 'O projeto possui execucoes ativas. Cancele-as antes de deletar.' };
+  }
+
+  const projectsRoot = path.resolve(rootDir(), PROJECTS_SUBDIR);
   const projectDir = path.resolve(rootDir(), path.dirname(project.root_path));
-  try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch { /* best-effort */ }
-  return { ok: true };
+  if (path.dirname(projectDir) !== projectsRoot) {
+    return { ok: false, error: 'Caminho do projeto recusado pela protecao de confinamento.' };
+  }
+
+  const quarantineDir = path.join(projectsRoot, '.deleting-' + id);
+  try {
+    if (fs.existsSync(projectDir)) fs.renameSync(projectDir, quarantineDir);
+  } catch (error) {
+    return { ok: false, error: 'Nao foi possivel isolar os arquivos para delecao: ' + (error instanceof Error ? error.message : String(error)) };
+  }
+
+  try {
+    db.transaction(() => {
+      const conversationIds = db.prepare('SELECT id FROM conversations WHERE project_id = ?')
+        .all(id) as Array<{ id: string }>;
+      for (const conversation of conversationIds) {
+        db.prepare('DELETE FROM group_participants WHERE conversation_id = ?').run(conversation.id);
+        db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversation.id);
+      }
+      db.prepare('DELETE FROM run_events WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').run(id);
+      db.prepare('DELETE FROM runs WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM conversations WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM tasks WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM usage_events WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM schedules WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM project_agents WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM project_settings WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    })();
+  } catch (error) {
+    try { if (fs.existsSync(quarantineDir)) fs.renameSync(quarantineDir, projectDir); } catch { /* preserve quarantined data */ }
+    return { ok: false, error: 'Falha ao remover dados do projeto: ' + (error instanceof Error ? error.message : String(error)) };
+  }
+
+  try {
+    fs.rmSync(quarantineDir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (error) {
+    return { ok: true, warning: 'Projeto removido; a limpeza final dos arquivos falhou: ' + (error instanceof Error ? error.message : String(error)) };
+  }
 }
 
 export function touchLastOpened(id: string): void {

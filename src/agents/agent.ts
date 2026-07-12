@@ -60,7 +60,8 @@ const nvidia = createOpenAI({
   },
 });
 import { getConfig } from '../config/loader.js';
-import { readSoul, readMemory, readDailyNote } from './personality.js';
+import { readSoul } from './personality.js';
+import { readScopedDailyNote, readScopedMemory } from '../projects/agent-memory.js';
 import { readUserProfile } from './user-profile.js';
 import { DATA_AUTHORITY_NOTE, prependUntrustedContext } from './prompt-data.js';
 import { listSkillMetas } from '../skills/loader.js';
@@ -146,6 +147,22 @@ export function looksFabricated(text: string, toolCallCount: number): boolean {
 
 export const ANTI_FABRICATION_RETRY_HINT =
   '[Verificacao do sistema] Sua resposta anterior alegou ter executado uma acao, mas voce NAO chamou nenhuma ferramenta neste turno — isso e inaceitavel. Agora CHAME as ferramentas necessarias de verdade e reporte apenas o resultado real retornado por elas. Se nao for possivel executar, diga claramente que nao executou.';
+
+export interface AgentTurnHandlers {
+  onTextDelta?: (text: string) => void;
+  onToolCall?: (toolName: string) => void;
+  onToolResult?: (toolName: string, output: unknown) => void;
+  onGuardRetry?: (reason: 'unfinished' | 'fabrication') => void;
+}
+
+export interface AgentTurnOutcome {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  toolCallCount: number;
+  finishReason: string;
+}
 
 export class Agent {
   public readonly id: string;
@@ -284,8 +301,8 @@ export class Agent {
     };
 
     const userProfile = readUserProfile();
-    const memory = readMemory(this.id);
-    const dailyNote = readDailyNote(this.id);
+    const memory = readScopedMemory(this.id);
+    const dailyNote = readScopedDailyNote(this.id);
 
     return prependUntrustedContext(messages, [
       {
@@ -416,10 +433,7 @@ export class Agent {
 
   async chatStream(
     messages: ModelMessage[],
-    handlers: {
-      onTextDelta?: (text: string) => void;
-      onToolCall?: (toolName: string) => void;
-    } = {},
+    handlers: AgentTurnHandlers = {},
     opts?: { systemHint?: string; contextData?: string; abortSignal?: AbortSignal },
   ): Promise<{
     text: string;
@@ -470,6 +484,9 @@ export class Agent {
           toolCallCount++;
           handlers.onToolCall?.(part.toolName);
           break;
+        case 'tool-result':
+          handlers.onToolResult?.(part.toolName, part.output);
+          break;
         case 'finish':
           inputTokens = part.totalUsage.inputTokens ?? 0;
           outputTokens = part.totalUsage.outputTokens ?? 0;
@@ -493,53 +510,77 @@ export class Agent {
     return { text, inputTokens, outputTokens, cachedInputTokens, toolCallCount, finishReason };
   }
 
+  async runGuardedTurn(
+    messages: ModelMessage[],
+    handlers: AgentTurnHandlers = {},
+    opts?: { contextData?: string; abortSignal?: AbortSignal },
+  ): Promise<AgentTurnOutcome> {
+    const working = [...messages];
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalCached = 0;
+    let totalToolCalls = 0;
+
+    const execute = async (systemHint?: string) => {
+      const result = await this.chatStream(working, handlers, {
+        abortSignal: opts?.abortSignal,
+        contextData: opts?.contextData,
+        systemHint,
+      });
+      totalInput += result.inputTokens;
+      totalOutput += result.outputTokens;
+      totalCached += result.cachedInputTokens;
+      totalToolCalls += result.toolCallCount;
+      return result;
+    };
+
+    let result = await execute();
+    let continuations = 0;
+    while (looksUnfinished(result.text, result.finishReason) && continuations < 2) {
+      continuations++;
+      handlers.onGuardRetry?.('unfinished');
+      working.push({ role: 'assistant', content: result.text });
+      working.push({ role: 'user', content: CONTINUE_HINT });
+      result = await execute();
+    }
+
+    let finalText = result.text;
+    if (looksFabricated(finalText, totalToolCalls)) {
+      handlers.onGuardRetry?.('fabrication');
+      working.push({ role: 'assistant', content: finalText });
+      working.push({ role: 'user', content: ANTI_FABRICATION_RETRY_HINT });
+      result = await execute(ANTI_FABRICATION_RETRY_HINT);
+      finalText = result.text;
+      if (looksFabricated(finalText, result.toolCallCount)) {
+        finalText = '[FALHA] O agente alegou ter executado a tarefa sem chamar nenhuma ferramenta (2 tentativas). Nada foi executado de verdade - trate como tarefa NAO realizada.';
+      }
+    }
+
+    return {
+      text: finalText,
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      cachedInputTokens: totalCached,
+      toolCallCount: totalToolCalls,
+      finishReason: result.finishReason,
+    };
+  }
+
   async processMessage(
     content: string,
     opts?: { context?: string; abortSignal?: AbortSignal; onToolCall?: (toolName: string) => void },
   ): Promise<string> {
     const messages: ModelMessage[] = [];
-
     if (opts?.context) {
       messages.push({ role: 'user', content: opts.context });
       messages.push({ role: 'assistant', content: 'Entendido.' });
     }
-
     messages.push({ role: 'user', content });
-
-    // chatStream (sem render de texto) para expor progresso das tool calls
-    const run = () =>
-      this.chatStream(
-        messages,
-        { onToolCall: opts?.onToolCall },
-        { abortSignal: opts?.abortSignal },
-      );
-
-    let result = await run();
-    let turnToolCallCount = result.toolCallCount;
-
-    // Auto-continuacao: turno cortado no meio do trabalho → continua (max 2x)
-    let continuations = 0;
-    while (looksUnfinished(result.text, result.finishReason) && continuations < 2) {
-      continuations++;
-      messages.push({ role: 'assistant', content: result.text });
-      messages.push({ role: 'user', content: CONTINUE_HINT });
-      result = await run();
-      turnToolCallCount += result.toolCallCount;
-    }
-
-    // Anti-fabricacao: alegou execucao sem chamar ferramenta → refaz uma vez
-    if (looksFabricated(result.text, turnToolCallCount)) {
-      result = await this.chatStream(
-        messages,
-        { onToolCall: opts?.onToolCall },
-        { abortSignal: opts?.abortSignal, systemHint: ANTI_FABRICATION_RETRY_HINT },
-      );
-
-      if (looksFabricated(result.text, result.toolCallCount)) {
-        return '[FALHA] O agente alegou ter executado a tarefa sem chamar nenhuma ferramenta (2 tentativas). Nada foi executado de verdade — trate como tarefa NAO realizada.';
-      }
-    }
-
+    const result = await this.runGuardedTurn(
+      messages,
+      { onToolCall: opts?.onToolCall },
+      { abortSignal: opts?.abortSignal },
+    );
     return result.text;
   }
 }

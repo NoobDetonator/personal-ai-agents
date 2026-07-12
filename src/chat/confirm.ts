@@ -2,6 +2,8 @@ import type readline from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import chalk from 'chalk';
 import { emitBus } from '../web/bus.js';
+import { getProjectContext } from '../projects/context.js';
+import { appendRunEvent, setRunStatus } from '../db/run-helpers.js';
 
 export type ConfirmAnswer = 'yes' | 'no' | 'always';
 
@@ -11,6 +13,9 @@ export interface PendingConfirmation {
   command?: string;
   allowAlways: boolean;
   createdAt: number;
+  projectId?: string;
+  conversationId?: string;
+  runId?: string;
 }
 
 interface PendingInternal extends PendingConfirmation {
@@ -54,8 +59,8 @@ function notifyChange(): void {
 }
 
 export function getPendingConfirmations(): PendingConfirmation[] {
-  return Array.from(pending.values()).map(({ id, message, command, allowAlways, createdAt }) => ({
-    id, message, command, allowAlways, createdAt,
+  return Array.from(pending.values()).map(({ id, message, command, allowAlways, createdAt, projectId, conversationId, runId }) => ({
+    id, message, command, allowAlways, createdAt, projectId, conversationId, runId,
   }));
 }
 
@@ -65,7 +70,12 @@ export function resolveConfirmation(id: string, answer: ConfirmAnswer): boolean 
   if (!item) return false;
   pending.delete(id);
   item.abortTerminalQuestion?.abort();
-  item.settle(answer === 'always' && !item.allowAlways ? 'yes' : answer);
+  const resolved = answer === 'always' && !item.allowAlways ? 'yes' : answer;
+  if (item.runId) {
+    setRunStatus(item.runId, 'running');
+    appendRunEvent(item.runId, 'confirmation', { id, status: 'resolved', answer: resolved });
+  }
+  item.settle(resolved);
   notifyChange();
   return true;
 }
@@ -91,6 +101,7 @@ export async function askConfirmation(
   opts?: { command?: string; allowAlways?: boolean },
 ): Promise<ConfirmResult> {
   const id = randomUUID().slice(0, 8);
+  const projectContext = getProjectContext();
 
   let settle!: (answer: ConfirmAnswer) => void;
   const answered = new Promise<ConfirmAnswer>(resolve => { settle = resolve; });
@@ -101,9 +112,25 @@ export async function askConfirmation(
     command: opts?.command,
     allowAlways: opts?.allowAlways ?? true,
     createdAt: Date.now(),
+    projectId: projectContext?.projectId,
+    conversationId: projectContext?.conversationId,
+    runId: projectContext?.runId,
     settle,
   };
   pending.set(id, item);
+  if (item.runId) {
+    setRunStatus(item.runId, 'waiting_confirmation');
+    appendRunEvent(item.runId, 'confirmation', { id, status: 'waiting', message, command: item.command });
+  }
+  emitBus('confirmation_requested', {
+    id,
+    message,
+    command: item.command,
+    allowAlways: item.allowAlways,
+    projectId: item.projectId,
+    conversationId: item.conversationId,
+    runId: item.runId,
+  });
   notifyChange();
 
   const canUseTerminal = rl !== null && !atMainPrompt;
@@ -118,9 +145,7 @@ export async function askConfirmation(
     rl!.question(query, { signal: controller.signal }, raw => {
       // Ignore if someone else (web) already settled it
       if (pending.has(id)) {
-        pending.delete(id);
-        item.settle(parseAnswer(raw, item.allowAlways));
-        notifyChange();
+        resolveConfirmation(id, parseAnswer(raw, item.allowAlways));
       }
     });
     return { answer: await answered };
@@ -132,6 +157,10 @@ export async function askConfirmation(
     if (pending.has(id)) {
       pending.delete(id);
       timedOut = true;
+      if (item.runId) {
+        setRunStatus(item.runId, 'running');
+        appendRunEvent(item.runId, 'confirmation', { id, status: 'timed_out', answer: 'no' });
+      }
       item.settle('no');
       notifyChange();
       emitBus('system', { text: `⏱ Aprovacao expirou sem resposta (${BACKGROUND_WAIT_MS / 1000}s): ${message}` });

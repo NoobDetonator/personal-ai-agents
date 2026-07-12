@@ -105,3 +105,45 @@ test('updateProject altera nome e descrição preservando o resto', () => {
   assert.equal(updated?.description, 'b');
   assert.equal(updated?.slug, p.slug, 'slug não muda ao renomear');
 });
+
+
+test('deleteProject bloqueia execucoes ativas', () => {
+  const p = svc.createProject({ name: 'Projeto ativo' });
+  connection.getDb().prepare(
+    "INSERT INTO runs (id, project_id, agent_id, status) VALUES ('run-active', ?, 'aria', 'running')",
+  ).run(p.id);
+
+  const blocked = svc.deleteProject(p.id, p.name);
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.error ?? '', /execucoes ativas/);
+  assert.ok(svc.getProject(p.id));
+
+  connection.getDb().prepare("UPDATE runs SET status = 'failed' WHERE id = 'run-active'").run();
+  assert.equal(svc.deleteProject(p.id, p.name).ok, true);
+});
+
+test('deleteProject remove dados dependentes sem deixar orfaos', () => {
+  const p = svc.createProject({ name: 'Projeto cascata' });
+  const db = connection.getDb();
+  db.prepare("INSERT INTO conversations (id, agent_id, project_id) VALUES ('conv-cascade', 'aria', ?)").run(p.id);
+  db.prepare("INSERT INTO messages (id, conversation_id, role, content) VALUES ('msg-cascade', 'conv-cascade', 'user', 'oi')").run();
+  db.prepare("INSERT INTO runs (id, project_id, conversation_id, agent_id, status) VALUES ('run-cascade', ?, 'conv-cascade', 'aria', 'done')").run(p.id);
+  db.prepare("INSERT INTO run_events (id, run_id, sequence, type) VALUES ('event-cascade', 'run-cascade', 1, 'status')").run();
+  db.prepare("INSERT INTO tasks (id, title, status, project_id) VALUES ('task-cascade', 't', 'done', ?)").run(p.id);
+  db.prepare("INSERT INTO usage_events (id, model, project_id) VALUES ('usage-cascade', 'test', ?)").run(p.id);
+  db.prepare("INSERT INTO schedules (id, agent_id, cron_expr, task_prompt, project_id) VALUES ('schedule-cascade', 'aria', '* * * * *', 't', ?)").run(p.id);
+
+  assert.equal(svc.deleteProject(p.id, p.name).ok, true);
+  for (const [table, id] of [
+    ['conversations', 'conv-cascade'],
+    ['messages', 'msg-cascade'],
+    ['runs', 'run-cascade'],
+    ['run_events', 'event-cascade'],
+    ['tasks', 'task-cascade'],
+    ['usage_events', 'usage-cascade'],
+    ['schedules', 'schedule-cascade'],
+  ]) {
+    const row = db.prepare('SELECT 1 FROM ' + table + ' WHERE id = ?').get(id);
+    assert.equal(row, undefined, table + ' nao deve manter orfao');
+  }
+});

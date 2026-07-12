@@ -2,6 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
+import { getProjectContext } from '../projects/context.js';
 
 export function createSchedulingTools(agentId: string) {
   const createScheduleTool = tool({
@@ -14,9 +15,10 @@ export function createSchedulingTools(agentId: string) {
       try {
         const db = getDb();
         const id = randomUUID();
+        const projectId = getProjectContext()?.projectId ?? 'legacy';
         db.prepare(
-          'INSERT INTO schedules (id, agent_id, cron_expr, task_prompt, enabled) VALUES (?, ?, ?, ?, 1)'
-        ).run(id, agentId, cronExpression, taskDescription);
+          'INSERT INTO schedules (id, agent_id, cron_expr, task_prompt, enabled, project_id) VALUES (?, ?, ?, ?, 1, ?)'
+        ).run(id, agentId, cronExpression, taskDescription, projectId);
 
         // The scheduler engine will pick this up via config change or manual refresh
         return {
@@ -37,9 +39,10 @@ export function createSchedulingTools(agentId: string) {
     inputSchema: z.object({}),
     execute: async () => {
       const db = getDb();
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
       const schedules = db.prepare(
-        'SELECT id, agent_id, cron_expr, task_prompt, enabled, last_run, created_at FROM schedules ORDER BY created_at DESC'
-      ).all();
+        "SELECT id, agent_id, cron_expr, task_prompt, enabled, last_run, created_at FROM schedules WHERE COALESCE(project_id, 'legacy') = ? ORDER BY created_at DESC"
+      ).all(projectId);
       return { schedules };
     },
   });
@@ -51,7 +54,8 @@ export function createSchedulingTools(agentId: string) {
     }),
     execute: async ({ scheduleId }) => {
       const db = getDb();
-      const result = db.prepare('DELETE FROM schedules WHERE id = ?').run(scheduleId);
+      const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const result = db.prepare("DELETE FROM schedules WHERE id = ? AND COALESCE(project_id, 'legacy') = ?").run(scheduleId, projectId);
       if (result.changes === 0) {
         return { error: `Tarefa "${scheduleId}" nao encontrada.` };
       }

@@ -5,6 +5,10 @@ export type BusEventType =
   | 'stream_delta'   // { agentId, text }
   | 'stream_end'     // { agentId, agentName, text }
   | 'tool_call'      // { agentId, toolName }
+  | 'tool_result'    // { agentId, toolName, result }
+  | 'stream_reset'   // { runId, reason }
+  | 'stream_continue' // { runId, reason }
+  | 'confirmation_requested' // { id, projectId?, conversationId?, runId? }
   | 'chat_message'   // { agentId, agentName, text }
   | 'tokens'         // { agentId, inputTokens, outputTokens }
   | 'system'         // { text }

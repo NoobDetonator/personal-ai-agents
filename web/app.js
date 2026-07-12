@@ -668,8 +668,37 @@ function scrollChatTimeline() {
   if (t) t.scrollTop = t.scrollHeight;
 }
 
-function chatMsgHtml(role, who, content) {
-  return `<div class="chat-msg chat-msg--${role}"><div class="chat-msg__who">${esc(who)}</div><div class="chat-msg__body">${esc(content)}</div></div>`;
+function historicalToolsHtml(events) {
+  const pending = new Map();
+  const cards = [];
+  for (const event of events || []) {
+    let payload = {};
+    try { payload = event.payload_json ? JSON.parse(event.payload_json) : {}; } catch { payload = {}; }
+    if (event.type === 'tool_start') {
+      const card = { tool: payload.tool || 'ferramenta', result: null };
+      cards.push(card);
+      const queue = pending.get(card.tool) || [];
+      queue.push(card);
+      pending.set(card.tool, queue);
+    } else if (event.type === 'tool_result') {
+      const queue = pending.get(payload.tool) || [];
+      const card = queue.shift();
+      if (card) card.result = payload.result;
+    }
+  }
+  if (!cards.length) return '';
+  return '<div class="chat-tools">' + cards.map(card => {
+    const raw = card.result == null ? 'Resultado nao registrado.' :
+      (typeof card.result === 'string' ? card.result : JSON.stringify(card.result, null, 2));
+    return `<div class="tool-card tool-card--done">
+      <button class="tool-card__head" type="button"><i data-lucide="wrench" class="ds-icon ds-icon--xs"></i> <b>${esc(card.tool)}</b> <i data-lucide="chevron-down" class="ds-icon ds-icon--xs tool-card__chev"></i></button>
+      <div class="tool-card__body ds-caption"><pre class="ds-code">${esc(raw.slice(0, 4000))}</pre></div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function chatMsgHtml(role, who, content, toolEvents) {
+  return `<div class="chat-msg chat-msg--${role}"><div class="chat-msg__who">${esc(who)}</div>${historicalToolsHtml(toolEvents)}<div class="chat-msg__body">${esc(content)}</div></div>`;
 }
 
 async function renderChat(convId) {
@@ -851,11 +880,32 @@ function addLiveToolCard(tool) {
   if (!c) return;
   const card = document.createElement('div');
   card.className = 'tool-card';
+  card.dataset.tool = tool || '';
   card.innerHTML = `
     <button class="tool-card__head" type="button"><i data-lucide="wrench" class="ds-icon ds-icon--xs"></i> <b>${esc(tool)}</b> <i data-lucide="chevron-down" class="ds-icon ds-icon--xs tool-card__chev"></i></button>
-    <div class="tool-card__body ds-caption">Ferramenta executada: <code class="ds-code">${esc(tool)}</code></div>`;
+    <div class="tool-card__body ds-caption">Executando <code class="ds-code">${esc(tool)}</code>...</div>`;
   c.appendChild(card);
   refreshIcons();
+}
+
+function completeLiveToolCard(tool, result) {
+  const cards = Array.from(document.querySelectorAll('#chat-live-tools .tool-card:not(.tool-card--done)'));
+  const card = cards.reverse().find(item => item.dataset.tool === (tool || ''));
+  if (!card) return;
+  card.classList.add('tool-card--done');
+  const body = card.querySelector('.tool-card__body');
+  if (body) {
+    const value = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+    body.innerHTML = `<div>Concluida</div><pre class="ds-code">${esc((value || '').slice(0, 4000))}</pre>`;
+  }
+}
+
+function resetLiveBubble() {
+  const bubble = ensureLiveBubble();
+  const text = bubble.querySelector('.text');
+  if (text) text.textContent = '';
+  const tools = bubble.querySelector('.chat-tools');
+  if (tools) tools.innerHTML = '';
 }
 
 function finalizeLiveBubble() {
@@ -875,6 +925,8 @@ function applyRunEventList(events) {
     try { pl = ev.payload_json ? JSON.parse(ev.payload_json) : {}; } catch { pl = {}; }
     if (ev.type === 'text_delta') appendLiveDelta(pl.text || '');
     else if (ev.type === 'tool_start') addLiveToolCard(pl.tool);
+    else if (ev.type === 'tool_result') completeLiveToolCard(pl.tool, pl.result);
+    else if (ev.type === 'status' && pl.status === 'retrying' && pl.reason === 'fabrication') resetLiveBubble();
   }
 }
 
@@ -933,6 +985,18 @@ function handleChatEvent(evt) {
       if (p.runId === chatSession.runId) {
         if (p.seq) chatSession.lastSeq = Math.max(chatSession.lastSeq, p.seq);
         addLiveToolCard(p.toolName);
+      }
+      break;
+    case 'tool_result':
+      if (p.runId === chatSession.runId) {
+        if (p.seq) chatSession.lastSeq = Math.max(chatSession.lastSeq, p.seq);
+        completeLiveToolCard(p.toolName, p.result);
+      }
+      break;
+    case 'stream_reset':
+      if (p.runId === chatSession.runId) {
+        if (p.seq) chatSession.lastSeq = Math.max(chatSession.lastSeq, p.seq);
+        resetLiveBubble();
       }
       break;
     case 'stream_end':
@@ -1150,12 +1214,12 @@ async function renderOverview() {
     const indent = depth === 0 ? '' : '<span class="tree-indent">' + '│&nbsp;&nbsp;'.repeat(depth - 1) + '├─&nbsp;</span>';
     const activity = busy.get(agent.id);
     const badges = [
-      activity === 'executando' ? `<span class="ds-badge ds-badge--warning ds-anim-thinking">⚙ executando</span>` : '',
-      activity === 'delegou' ? `<span class="ds-badge ds-badge--info">↳ delegou</span>` : '',
+      activity === 'executando' ? `<span class="ds-badge ds-badge--warning ds-anim-thinking"> executando</span>` : '',
+      activity === 'delegou' ? `<span class="ds-badge ds-badge--info"> delegou</span>` : '',
       roleBadge(agent.role),
       agent.team ? `<span class="ds-badge ds-badge--success">${esc(agent.team)}</span>` : '',
       agent.temporary ? `<span class="ds-badge ds-badge--warning">temp</span>` : '',
-      agent.fast ? `<span class="ds-badge">⚡fast</span>` : '',
+      agent.fast ? `<span class="ds-badge">fast</span>` : '',
       profileBadge(agent.profileProvenance),
     ].join(' ');
     lines.push(`
@@ -1261,7 +1325,7 @@ async function renderAgents() {
           ${roleBadge(a.role)}
           ${a.team ? `<span class="ds-badge ds-badge--success">${esc(a.team)}</span>` : ''}
           ${a.temporary ? `<span class="ds-badge ds-badge--warning">temp</span>` : ''}
-          ${a.fast ? `<span class="ds-badge">⚡fast</span>` : ''}
+          ${a.fast ? `<span class="ds-badge">fast</span>` : ''}
           ${profileBadge(a.profileProvenance)}
         </div>
         <div class="ds-inline ds-cluster ds-cluster-sm" style="margin-top:10px;">
@@ -1295,7 +1359,7 @@ async function renderAgentDetail(id) {
 
   const cmds = (a.commands || []).map(c => `
     <tr>
-      <td>${c.exit_code === 0 ? '<span class="ds-badge ds-badge--success">ok</span>' : c.exit_code == null ? '<span class="ds-badge ds-badge--warning">⏱</span>' : '<span class="ds-badge ds-badge--danger">' + c.exit_code + '</span>'}</td>
+      <td>${c.exit_code === 0 ? '<span class="ds-badge ds-badge--success">ok</span>' : c.exit_code == null ? '<span class="ds-badge ds-badge--warning"></span>' : '<span class="ds-badge ds-badge--danger">' + c.exit_code + '</span>'}</td>
       <td class="ds-code">${esc(c.command)}</td>
       <td class="ds-caption">${esc(c.created_at)}</td>
     </tr>`
@@ -1455,7 +1519,7 @@ async function renderSettings() {
         <label class="ds-switch"><input type="checkbox" class="ds-switch__input" id="set-hb" ${c.heartbeatEnabled ? 'checked' : ''}><span class="ds-switch__track"><span class="ds-switch__thumb"></span></span></label>`)}
       ${settingRow('Intervalo do heartbeat (min)', 'Frequência do ciclo autônomo', `
         <input type="number" class="ds-input" id="set-hb-min" min="1" value="${c.heartbeatIntervalMin}" style="width:90px" />`)}
-      ${settingRow('Mostrar tool calls', 'Indicadores ⚙ no terminal e no painel', `
+      ${settingRow('Mostrar tool calls', 'Indicadores  no terminal e no painel', `
         <label class="ds-switch"><input type="checkbox" class="ds-switch__input" id="set-tools" ${c.showToolCalls ? 'checked' : ''}><span class="ds-switch__track"><span class="ds-switch__thumb"></span></span></label>`)}
       ${settingRow('Nudge de memória', 'Lembrete de persistir memória a cada N mensagens (0 desativa)', `
         <input type="number" class="ds-input" id="set-nudge" min="0" value="${c.nudgeEvery}" style="width:90px" />`)}
@@ -1605,7 +1669,7 @@ function handleEvent(evt) {
           if (label) label.textContent = `executando ${p.toolName}...`;
           const chip = document.createElement('span');
           chip.className = 'ds-chip bubble-toolchip';
-          chip.textContent = '⚙ ' + p.toolName;
+          chip.textContent = ' ' + p.toolName;
           div.appendChild(chip);
         }
       }
@@ -1665,7 +1729,7 @@ function handleDelegationEvent(p) {
   document.querySelectorAll(`.bubble[data-deleg-id="${CSS.escape(p.id)}"]`).forEach(div => {
     const status = div.querySelector('.deleg-status');
     if (p.status === 'progress' && status) {
-      status.textContent = '⚙ ' + p.toolName;
+      status.textContent = ' ' + p.toolName;
     } else if (p.status === 'done' || p.status === 'failed' || p.status === 'cancelled') {
       const icon = p.status === 'done' ? '✓ concluído' : p.status === 'cancelled' ? '⊘ cancelado' : '✗ falhou';
       if (status) status.textContent = icon;

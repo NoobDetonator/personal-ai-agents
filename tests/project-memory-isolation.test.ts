@@ -1,0 +1,61 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+let connection: typeof import('../src/db/connection.js');
+let projects: typeof import('../src/projects/service.js');
+let context: typeof import('../src/projects/context.js');
+let memory: typeof import('../src/projects/agent-memory.js');
+let usage: typeof import('../src/agents/usage.js');
+
+before(async () => {
+  process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'paa-scoped-memory-')));
+  connection = await import('../src/db/connection.js');
+  projects = await import('../src/projects/service.js');
+  context = await import('../src/projects/context.js');
+  memory = await import('../src/projects/agent-memory.js');
+  usage = await import('../src/agents/usage.js');
+  connection.initDatabase();
+});
+
+after(() => connection.closeDatabase());
+
+test('memorias e uso ficam isolados por projeto', () => {
+  const a = projects.createProject({ name: 'Memoria A' });
+  const b = projects.createProject({ name: 'Memoria B' });
+  const ctxA = projects.buildProjectContext(a.id);
+  const ctxB = projects.buildProjectContext(b.id);
+
+  context.runWithProjectContext(ctxA, () => {
+    memory.appendScopedMemorySection('aria', 'Projeto', 'segredo A');
+    memory.appendScopedDailyNote('aria', 'evento A');
+    memory.saveScopedDeepMemory('aria', 'contexto', 'somente A', 'conteudo profundo A');
+    usage.addUsage(10, 2, 0, 'deepseek-v4-flash', { agentId: 'aria' });
+  });
+  context.runWithProjectContext(ctxB, () => {
+    memory.appendScopedMemorySection('aria', 'Projeto', 'segredo B');
+    memory.appendScopedDailyNote('aria', 'evento B');
+    memory.saveScopedDeepMemory('aria', 'contexto', 'somente B', 'conteudo profundo B');
+    usage.addUsage(5, 1, 0, 'deepseek-v4-flash', { agentId: 'aria' });
+  });
+
+  context.runWithProjectContext(ctxA, () => {
+    assert.match(memory.readScopedMemory('aria'), /segredo A/);
+    assert.doesNotMatch(memory.readScopedMemory('aria'), /segredo B/);
+    assert.match(memory.readScopedDailyNote('aria'), /evento A/);
+    assert.match(memory.readScopedDeepMemory('aria', 'contexto') ?? '', /profundo A/);
+  });
+  context.runWithProjectContext(ctxB, () => {
+    assert.match(memory.readScopedMemory('aria'), /segredo B/);
+    assert.doesNotMatch(memory.readScopedMemory('aria'), /segredo A/);
+    assert.match(memory.readScopedDailyNote('aria'), /evento B/);
+    assert.match(memory.readScopedDeepMemory('aria', 'contexto') ?? '', /profundo B/);
+  });
+
+  const rows = connection.getDb().prepare(
+    'SELECT project_id, COUNT(*) AS count FROM usage_events WHERE project_id IN (?, ?) GROUP BY project_id',
+  ).all(a.id, b.id) as Array<{ project_id: string; count: number }>;
+  assert.deepEqual(new Map(rows.map(row => [row.project_id, row.count])), new Map([[a.id, 1], [b.id, 1]]));
+});
