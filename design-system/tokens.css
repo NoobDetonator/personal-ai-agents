@@ -250,67 +250,67 @@
 :root, [data-theme="dark"] {
 
   /* --- Surfaces --- */
-  --ds-surface-base:       var(--p-gray-900);
-  --ds-surface-raised:     #242932;
-  --ds-surface-sunken:     #181b22;
+  --ds-surface-base:       #151820;
+  --ds-surface-raised:     #222733;
+  --ds-surface-sunken:     #10131a;
   --ds-surface-overlay:    rgba(0, 0, 0, 0.6);
-  --ds-surface-neu-base:   #1f232b;
+  --ds-surface-neu-base:   #1a1e27;
 
   /* --- Text --- */
-  --ds-text-primary:    var(--p-gray-50);
-  --ds-text-secondary:  var(--p-gray-200);
-  --ds-text-muted:      var(--p-gray-400);
-  --ds-text-disabled:   var(--p-gray-600);
+  --ds-text-primary:    #f2f4f8;
+  --ds-text-secondary:  #c2c8d4;
+  --ds-text-muted:      #858d9c;
+  --ds-text-disabled:   #596170;
   --ds-text-inverse:    var(--p-gray-900);
   --ds-text-on-brand:   #ffffff;
 
   /* --- Borders --- */
-  --ds-border-default:  rgba(255, 255, 255, 0.06);
-  --ds-border-subtle:   rgba(255, 255, 255, 0.03);
-  --ds-border-strong:   rgba(255, 255, 255, 0.12);
+  --ds-border-default:  rgba(190, 199, 220, 0.10);
+  --ds-border-subtle:   rgba(190, 199, 220, 0.055);
+  --ds-border-strong:   rgba(205, 213, 232, 0.18);
 
   /* --- Brand / Action --- */
-  --ds-action-primary:         var(--p-indigo-400);
-  --ds-action-primary-hover:   var(--p-indigo-300);
-  --ds-action-primary-active:  var(--p-indigo-500);
-  --ds-action-primary-subtle:  rgba(129, 140, 248, 0.15);
-  --ds-action-secondary:       var(--p-blue-400);
-  --ds-action-secondary-hover: var(--p-blue-300);
-  --ds-action-secondary-subtle: rgba(96, 165, 250, 0.15);
+  --ds-action-primary:         #9aa8ff;
+  --ds-action-primary-hover:   #b7c0ff;
+  --ds-action-primary-active:  #7b8cf5;
+  --ds-action-primary-subtle:  rgba(154, 168, 255, 0.14);
+  --ds-action-secondary:       #67c7e8;
+  --ds-action-secondary-hover: #8bd8f1;
+  --ds-action-secondary-subtle: rgba(103, 199, 232, 0.13);
 
   /* --- Feedback — Success --- */
-  --ds-feedback-success:       var(--p-emerald-400);
-  --ds-feedback-success-bg:    rgba(52, 211, 153, 0.1);
-  --ds-feedback-success-text:  var(--p-emerald-300);
-  --ds-feedback-success-border: rgba(52, 211, 153, 0.25);
+  --ds-feedback-success:       #63d6a0;
+  --ds-feedback-success-bg:    rgba(99, 214, 160, 0.11);
+  --ds-feedback-success-text:  #8be4b9;
+  --ds-feedback-success-border: rgba(99, 214, 160, 0.26);
 
   /* --- Feedback — Warning --- */
-  --ds-feedback-warning:       var(--p-amber-400);
-  --ds-feedback-warning-bg:    rgba(251, 191, 36, 0.1);
-  --ds-feedback-warning-text:  var(--p-amber-300);
-  --ds-feedback-warning-border: rgba(251, 191, 36, 0.25);
+  --ds-feedback-warning:       #f2bd67;
+  --ds-feedback-warning-bg:    rgba(242, 189, 103, 0.11);
+  --ds-feedback-warning-text:  #f7cf8e;
+  --ds-feedback-warning-border: rgba(242, 189, 103, 0.27);
 
   /* --- Feedback — Danger --- */
-  --ds-feedback-danger:        var(--p-red-400);
-  --ds-feedback-danger-bg:     rgba(248, 113, 113, 0.1);
-  --ds-feedback-danger-text:   var(--p-red-300);
-  --ds-feedback-danger-border: rgba(248, 113, 113, 0.25);
+  --ds-feedback-danger:        #f27d8a;
+  --ds-feedback-danger-bg:     rgba(242, 125, 138, 0.11);
+  --ds-feedback-danger-text:   #f5a0aa;
+  --ds-feedback-danger-border: rgba(242, 125, 138, 0.27);
 
   /* --- Feedback — Info --- */
-  --ds-feedback-info:          var(--p-cyan-400);
-  --ds-feedback-info-bg:       rgba(34, 211, 238, 0.1);
-  --ds-feedback-info-text:     var(--p-cyan-300);
-  --ds-feedback-info-border:   rgba(34, 211, 238, 0.25);
+  --ds-feedback-info:          #67c7e8;
+  --ds-feedback-info-bg:       rgba(103, 199, 232, 0.11);
+  --ds-feedback-info-text:     #91dbf2;
+  --ds-feedback-info-border:   rgba(103, 199, 232, 0.26);
 
   /* --- Feedback — Violet (roles) --- */
-  --ds-feedback-violet:        var(--p-violet-400);
-  --ds-feedback-violet-bg:     rgba(167, 139, 250, 0.1);
-  --ds-feedback-violet-text:   var(--p-violet-300);
-  --ds-feedback-violet-border: rgba(167, 139, 250, 0.25);
+  --ds-feedback-violet:        #c093f7;
+  --ds-feedback-violet-bg:     rgba(192, 147, 247, 0.11);
+  --ds-feedback-violet-text:   #d2b2fa;
+  --ds-feedback-violet-border: rgba(192, 147, 247, 0.26);
 
   /* --- Neumorphic Shadows --- */
-  --ds-neu-shadow-light: #292f3a;
-  --ds-neu-shadow-dark:  #12141a;
+  --ds-neu-shadow-light: #272d39;
+  --ds-neu-shadow-dark:  #0a0d13;
 
   --ds-shadow-outset-xs:  2px 2px 4px var(--ds-neu-shadow-dark), -2px -2px 4px var(--ds-neu-shadow-light);
   --ds-shadow-outset-sm:  3px 3px 6px var(--ds-neu-shadow-dark), -3px -3px 6px var(--ds-neu-shadow-light);
@@ -329,8 +329,8 @@
   --ds-shadow-float-lg: 0 8px 32px rgba(0,0,0,0.5), 0 4px 8px rgba(0,0,0,0.25);
 
   /* Convex/Concave gradients for neumorphism */
-  --ds-grad-convex:  linear-gradient(135deg, #242932, #1a1d24);
-  --ds-grad-concave: linear-gradient(135deg, #1a1d24, #242932);
+  --ds-grad-convex:  linear-gradient(135deg, #222733, #161a22);
+  --ds-grad-concave: linear-gradient(135deg, #11141b, #222733);
 
   /* --- Focus --- */
   --ds-focus-ring:        var(--p-indigo-400);
