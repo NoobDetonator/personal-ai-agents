@@ -46,6 +46,14 @@ test('extrai titulo e resumo pulando blockquote de integracao', () => {
   assert.match(profile.revision, /^[a-f0-9]{12}$/);
 });
 
+test('carrega automaticamente o nucleo e o manual integral do perfil', () => {
+  const core = composer.readOperationalCore();
+  const manual = composer.readProfileManual('testador');
+  assert.ok(core?.includes('Nucleo comum'));
+  assert.ok(manual?.includes('## Regras'));
+  assert.equal(composer.readProfileManual('nao-existe'), null);
+});
+
 test('composeSoul gera soul curta com identidade, resumo, missao e manual', () => {
   const soul = composer.composeSoul({
     profileId: 'testador',

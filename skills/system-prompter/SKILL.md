@@ -24,7 +24,7 @@ A pasta desta skill contem uma biblioteca de perfis completos em `perfis/` — m
 
 ## Receita
 
-**Caminho padrao (automatico):** passe `profileId` no createAgent (liste com listAgentProfiles) e descreva a funcao especifica em `personality` (max 30 palavras). A soul final e validada em 150 palavras e registra id + revisao do perfil. Semeie `initialMemory` normalmente (passo 3).
+**Caminho padrao (automatico):** passe `profileId` no createAgent (liste com listAgentProfiles) e descreva a funcao especifica em `personality` (max 30 palavras). A soul final e validada em 150 palavras, registra id + revisao e o runtime injeta automaticamente o nucleo comum e o manual completo do perfil no system prompt. Nao dependa de uma chamada posterior a useSkill ou readFile. Semeie `initialMemory` normalmente (passo 3).
 
 **Caminho manual** (papel novo que nao existe na biblioteca):
 
@@ -46,7 +46,7 @@ Sua funcao e [resultado verificavel].
 
 3. Semeie `initialMemory` com contexto (projeto, tarefa, arquivos/fontes, formato, limites) — nao repita a soul.
 4. Delegue com prompt completo: contexto suficiente, tarefa objetiva, ferramentas esperadas, formato de resposta, criterio de pronto e o que NAO fazer.
-5. Para tarefas que exigem rigor total, instrua o agente no prompt de delegacao a ler o perfil completo via readFile antes de comecar.
+5. Para tarefas que exigem rigor total, inclua criterios objetivos de verificacao na delegacao; perfis gerenciados ja recebem o manual completo automaticamente.
 
 ## Tabela de perfis
 

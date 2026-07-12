@@ -22,7 +22,7 @@ import {
 export function createAgentManagementTools(creatorId: string, onAgentCreated?: (agent: Agent) => void) {
   const createAgentTool = tool({
     description:
-      'Criar um novo agente subordinado a voce. PREFIRA profileId (veja listAgentProfiles): a soul e composta automaticamente e personality vira a missao especifica (max 30 palavras). Sem profileId, personality e condensada em uma soul final de max 150 palavras.',
+      'Criar um novo agente subordinado. Para papeis existentes, USE profileId: ele ativa automaticamente o manual operacional completo no system prompt; personality vira a missao especifica (max 30 palavras). Use personality sem profileId apenas para um papel realmente ausente da biblioteca.',
     inputSchema: z.object({
       name: z.string().describe('Nome do agente (ex: "roteirista1"). Minusculas, sem espacos.'),
       profileId: z.string().optional().describe('Perfil da biblioteca (ex: "programador", "pesquisador", "revisor-codigo" — liste com listAgentProfiles). Compoe a soul automaticamente.'),
@@ -32,7 +32,7 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
       role: z.enum(['manager', 'worker']).optional().describe('Papel: "manager" lidera uma equipe (so a principal pode criar managers). Padrao: worker.'),
       temporary: z.boolean().optional().describe('true para agente temporario (descartavel apos a tarefa)'),
       fastMode: z.boolean().optional().describe('true = agente rapido sem thinking mode (DeepSeek): responde muito mais rapido e custa menos. Recomendado para workers de execucao direta; deixe false so para tarefas que exigem raciocinio profundo.'),
-      initialMemory: z.string().optional().describe('Memoria inicial para condicionar o agente (contexto do projeto, instrucoes)'),
+      initialMemory: z.string().optional().describe('Contexto concreto: arquivos, publico, restricoes, formato, criterio de pronto e como verificar. Nao repita a soul.'),
     }),
     execute: async ({ name, profileId, personality, description, team, role, temporary, fastMode, initialMemory }) => {
       try {
@@ -67,6 +67,8 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
           });
         } else if (personality) {
           customSoul = composeManualSoul(personality);
+        } else {
+          return { error: 'Agente sem papel definido. Informe profileId (recomendado) ou personality apenas quando nao existir perfil adequado.' };
         }
 
         if (initialMemory) {

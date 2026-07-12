@@ -104,6 +104,26 @@ export function getProfile(id: string): ProfileInfo | undefined {
   return listProfiles().find(p => p.id === slug);
 }
 
+/** Manual integral confiavel de um perfil gerenciado. */
+export function readProfileManual(id: string): string | null {
+  const profile = getProfile(id);
+  if (!profile) return null;
+  try {
+    return fs.readFileSync(path.join(getProfilesDir(), `${profile.id}.md`), 'utf-8').trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Nucleo comum aplicado a todo agente com perfil gerenciado. */
+export function readOperationalCore(): string | null {
+  try {
+    return fs.readFileSync(path.join(getProfilesDir(), 'core-operacional.md'), 'utf-8').trim();
+  } catch {
+    return null;
+  }
+}
+
 export function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }

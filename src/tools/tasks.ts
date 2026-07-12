@@ -170,6 +170,9 @@ async function delegateToAgent(
       context:
         `Voce recebeu uma tarefa delegada pelo seu superior "${createdBy}". ` +
         'Execute a tarefa da melhor forma possivel usando suas ferramentas e responda com o resultado objetivo, no formato pedido. ' +
+        'Seu manual operacional de perfil ja esta ativo no system prompt: aplique o fluxo, os principios, os anti-padroes e o gate final sem esperar nova instrucao. ' +
+        'Nao entregue apenas o minimo mecanico: dentro do escopo, cuide de completude, consistencia, estados relevantes, qualidade tecnica e acabamento. ' +
+        'Melhorias adicionais devem ser diretamente relacionadas, seguras e verificaveis; nao invente funcionalidades nem mude o objetivo do produto. ' +
         'Nao faca perguntas de volta — se algo for ambiguo, tome a decisao mais razoavel e registre a suposicao. ' +
         'OBRIGATORIO antes de responder: VERIFIQUE seu trabalho com as ferramentas (releia cada arquivo que criou do inicio ao fim, liste os diretorios) e conserte o que estiver incompleto. ' +
         'Arquivos grandes: escreva em partes (writeFile + appendFile). ' +
