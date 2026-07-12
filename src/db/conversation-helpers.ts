@@ -123,14 +123,14 @@ export function loadConversationById(conversationId: string, maxMessages: number
 export function forkConversation(conversationId: string): string | null {
   try {
     const db = getDb();
-    const original = db.prepare('SELECT agent_id, type, title FROM conversations WHERE id = ?')
-      .get(conversationId) as { agent_id: string; type: string; title: string | null } | undefined;
+    const original = db.prepare('SELECT agent_id, type, title, project_id FROM conversations WHERE id = ?')
+      .get(conversationId) as { agent_id: string; type: string; title: string | null; project_id: string | null } | undefined;
     if (!original) return null;
 
     const newId = randomUUID();
     db.prepare(
-      `INSERT INTO conversations (id, agent_id, type, title) VALUES (?, ?, ?, ?)`
-    ).run(newId, original.agent_id, original.type, `Fork de ${original.title ?? conversationId.slice(0, 8)}`);
+      `INSERT INTO conversations (id, agent_id, type, title, project_id) VALUES (?, ?, ?, ?, ?)`
+    ).run(newId, original.agent_id, original.type, `Fork de ${original.title ?? conversationId.slice(0, 8)}`, original.project_id);
 
     const messages = db.prepare(
       `SELECT role, content, agent_id, tool_calls, input_tokens, output_tokens, created_at

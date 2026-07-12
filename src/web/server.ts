@@ -37,7 +37,8 @@ import {
   patchConversation,
 } from '../projects/conversation-service.js';
 import { startChatRun, cancelRun } from '../chat/run-service.js';
-import { getRun, listRunEvents } from '../db/run-helpers.js';
+import { getRun, listRunEvents, getLatestRunForConversation, isTerminalStatus, type RunStatus } from '../db/run-helpers.js';
+import { deleteConversation, forkConversation } from '../db/conversation-helpers.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
@@ -289,11 +290,23 @@ function apiAnalytics(params: URLSearchParams): unknown {
 
 function apiConversation(id: string): unknown {
   const db = getDb();
+  const meta = db.prepare(
+    `SELECT id, project_id, agent_id, title, archived, pinned, last_run_status FROM conversations WHERE id = ?`
+  ).get(id) as Record<string, unknown> | undefined;
+
   const messages = db.prepare(
-    `SELECT role, content, agent_id, input_tokens, output_tokens, created_at
-     FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 300`
+    `SELECT role, content, agent_id, run_id, sequence, status, input_tokens, output_tokens, created_at
+     FROM messages WHERE conversation_id = ? ORDER BY sequence ASC, created_at ASC LIMIT 300`
   ).all(id);
-  return { id, messages };
+
+  // Run em andamento: devolve seus eventos para reconstruir a bolha parcial
+  // após um refresh no meio do streaming.
+  const latest = getLatestRunForConversation(id);
+  const activeRun = latest && !isTerminalStatus(latest.status as RunStatus)
+    ? { id: latest.id, status: latest.status, agentId: latest.agent_id, events: listRunEvents(latest.id) }
+    : null;
+
+  return { id, meta: meta ?? null, messages, activeRun };
 }
 
 function apiGroups(): unknown {
@@ -612,6 +625,16 @@ export function startWebServer(): void {
       // --- Conversations (project-scoped) & runs ---
       const convScopedMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
       if (method === 'PATCH' && convScopedMatch) return await handlePatchConversation(req, res, convScopedMatch[1]);
+      if (method === 'DELETE' && convScopedMatch) {
+        const ok = deleteConversation(convScopedMatch[1]);
+        return json(res, ok ? 200 : 404, { success: ok });
+      }
+
+      const convForkMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)\/fork$/);
+      if (method === 'POST' && convForkMatch) {
+        const newId = forkConversation(convForkMatch[1]);
+        return newId ? json(res, 201, { conversationId: newId }) : json(res, 404, { error: 'conversa nao encontrada' });
+      }
 
       const convMsgMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)\/messages$/);
       if (method === 'POST' && convMsgMatch) return await handlePostMessage(req, res, convMsgMatch[1]);

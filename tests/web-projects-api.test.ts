@@ -12,6 +12,7 @@ let connection: typeof import('../src/db/connection.js');
 let server: typeof import('../src/web/server.js');
 let runHelpers: typeof import('../src/db/run-helpers.js');
 let svc: typeof import('../src/projects/service.js');
+let runService: typeof import('../src/chat/run-service.js');
 
 let base: string;
 let token: string;
@@ -39,6 +40,7 @@ before(async () => {
   server = await import('../src/web/server.js');
   runHelpers = await import('../src/db/run-helpers.js');
   svc = await import('../src/projects/service.js');
+  runService = await import('../src/chat/run-service.js');
 
   loader.loadConfig();
   const port = 3200 + Math.floor(Math.random() * 1500);
@@ -145,6 +147,70 @@ test('DELETE projeto exige confirmName exato', async () => {
 
   const gone = await api('GET', `/api/projects/${pid}`);
   assert.equal(gone.status, 404);
+});
+
+async function waitRunTerminal(runId: string, timeoutMs = 3000): Promise<any> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const r = await api('GET', `/api/runs/${runId}/events`);
+    if (r.json?.run && ['done', 'failed', 'cancelled', 'timed_out'].includes(r.json.run.status)) return r.json;
+    await new Promise(res => setTimeout(res, 25));
+  }
+  throw new Error('run não terminou a tempo');
+}
+
+test('POST message dispara run, streaming persiste eventos e mensagem do assistente', async () => {
+  // Executor de eco (sem LLM) para exercitar o fluxo HTTP de ponta a ponta.
+  runService.setChatExecutorOverride(async ({ handlers }) => {
+    handlers.onTextDelta('oi ');
+    handlers.onToolCall('readFile');
+    handlers.onTextDelta('pronto');
+    return { text: 'oi pronto', inputTokens: 5, outputTokens: 2, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
+  });
+
+  const proj = await api('POST', '/api/projects', { name: 'ChatFlow' });
+  const pid = proj.json.project.id;
+  const conv = await api('POST', `/api/projects/${pid}/conversations`, {});
+  const cid = conv.json.conversationId;
+
+  const sent = await api('POST', `/api/conversations/${cid}/messages`, { text: 'ola' });
+  assert.equal(sent.status, 202);
+  const runId = sent.json.runId;
+  assert.ok(runId);
+
+  const finished = await waitRunTerminal(runId);
+  assert.equal(finished.run.status, 'done');
+  const types = finished.events.map((e: any) => e.type);
+  assert.ok(types.includes('text_delta'));
+  assert.ok(types.includes('tool_start'));
+
+  const detail = await api('GET', `/api/conversations/${cid}`);
+  const roles = detail.json.messages.map((m: any) => m.role);
+  assert.deepEqual(roles, ['user', 'assistant']);
+  assert.equal(detail.json.messages[1].content, 'oi pronto');
+  assert.equal(detail.json.activeRun, null, 'run terminado não é activeRun');
+
+  runService.setChatExecutorOverride(null);
+});
+
+test('fork duplica a conversa e DELETE remove', async () => {
+  const proj = await api('POST', '/api/projects', { name: 'ForkDel' });
+  const pid = proj.json.project.id;
+  const conv = await api('POST', `/api/projects/${pid}/conversations`, { title: 'Original' });
+  const cid = conv.json.conversationId;
+
+  const forked = await api('POST', `/api/conversations/${cid}/fork`, {});
+  assert.equal(forked.status, 201);
+  assert.ok(forked.json.conversationId);
+  assert.notEqual(forked.json.conversationId, cid);
+
+  const list = await api('GET', `/api/projects/${pid}/conversations`);
+  assert.equal((list.json as Array<unknown>).length, 2);
+
+  const del = await api('DELETE', `/api/conversations/${cid}`);
+  assert.equal(del.status, 200);
+  const after = await api('GET', `/api/projects/${pid}/conversations`);
+  assert.equal((after.json as Array<unknown>).length, 1);
 });
 
 test('archive marca o projeto como archived e PATCH status restaura', async () => {

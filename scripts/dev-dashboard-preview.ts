@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import type { TurnExecutor } from '../src/chat/run-service.js';
 
 const ROOT = process.cwd();
 const CONFIG_PATH = path.join(ROOT, 'config.json');
@@ -55,6 +56,9 @@ async function main(): Promise<void> {
   const { initDatabase } = await import('../src/db/connection.js');
   const { startWebServer, getWebPanelUrl } = await import('../src/web/server.js');
   const { computeCallCost } = await import('../src/agents/usage.js');
+  const { createProject } = await import('../src/projects/service.js');
+  const { createProjectConversation } = await import('../src/projects/conversation-service.js');
+  const { setChatExecutorOverride } = await import('../src/chat/run-service.js');
 
   loadConfig({ writeBack: false });
   const db = initDatabase();
@@ -134,6 +138,28 @@ async function main(): Promise<void> {
       'aria', team, sqliteTs((hoursAgo + 2) * H), sqliteTs(hoursAgo * H),
     );
   }
+
+  // Projeto de exemplo com uma conversa, para exercitar o chat pela web.
+  const demo = createProject({ name: 'Demo Chat', description: 'Projeto de exemplo para testar o chat.' });
+  createProjectConversation(demo.id, 'aria', { title: 'Bate-papo com a Aria', createdBy: 'preview' });
+
+  // Executor de eco: transmite a resposta em partes com uma tool call, sem IA.
+  const echoExecutor: TurnExecutor = async ({ messages, handlers, abortSignal }) => {
+    const last = messages[messages.length - 1];
+    const userText = typeof last?.content === 'string' ? last.content : 'olá';
+    const reply = `Recebi sua mensagem: "${userText}". Esta é uma resposta de exemplo, transmitida em partes para demonstrar o streaming pela web.`;
+    const words = reply.split(' ');
+    let output = 0;
+    for (let i = 0; i < words.length; i++) {
+      if (abortSignal.aborted) throw new Error('Chamada abortada (cancelamento).');
+      if (i === 4) handlers.onToolCall('readFile');
+      handlers.onTextDelta(words[i] + (i < words.length - 1 ? ' ' : ''));
+      output++;
+      await new Promise(r => setTimeout(r, 140));
+    }
+    return { text: reply, inputTokens: 24, outputTokens: output, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
+  };
+  setChatExecutorOverride(echoExecutor);
 
   startWebServer();
   console.log('[preview] Painel disponível em:');

@@ -93,6 +93,14 @@ export function getRun(runId: string): Run | null {
   return row ? (row as unknown as Run) : null;
 }
 
+/** Run mais recente de uma conversa (para retomada). */
+export function getLatestRunForConversation(conversationId: string): Run | null {
+  const row = getDb().prepare(
+    'SELECT * FROM runs WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+  ).get(conversationId) as Record<string, unknown> | undefined;
+  return row ? (row as unknown as Run) : null;
+}
+
 /**
  * Anexa um evento ao run com número de sequência monotônico por run. A leitura
  * do próximo sequence e a inserção acontecem numa transação para evitar corrida.

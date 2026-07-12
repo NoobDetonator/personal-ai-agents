@@ -183,7 +183,7 @@ function aiBadge(provider, model) {
 
 // ---------- Navegacao ----------
 
-const views = ['projects', 'project-detail', 'overview', 'live', 'agents', 'agent-detail', 'board', 'skills', 'settings'];
+const views = ['projects', 'project-detail', 'chat', 'overview', 'live', 'agents', 'agent-detail', 'board', 'skills', 'settings'];
 
 function show(view) {
   for (const v of views) {
@@ -209,6 +209,12 @@ async function router() {
   if (route === 'project' && param) {
     show('project-detail');
     await renderProjectDetail(param);
+    return;
+  }
+
+  if (route === 'chat') {
+    show('chat');
+    await renderChat(param || null);
     return;
   }
 
@@ -432,16 +438,13 @@ async function renderProjectDetail(id) {
       <div class="ds-list ds-list--interactive">${convItems}</div>
     </div>
 
-    <div class="ds-card hidden" id="pd-conv-card" style="margin-top:16px;">
-      <div class="ds-card__header"><h3 class="ds-card__title" id="pd-conv-title">Conversa</h3></div>
-      <div id="pd-conv-messages"></div>
-    </div>
   `;
 
   $('#pd-new-conv')?.addEventListener('click', () => createConversation(p.id));
   $('#pd-edit')?.addEventListener('click', () => openEditProjectModal(p));
   document.querySelectorAll('#view-project-detail [data-conversation-id]').forEach(item => {
-    const open = () => loadConversationInto(item.dataset.conversationId, 'Aria', { card: 'pd-conv-card', title: 'pd-conv-title', messages: 'pd-conv-messages' });
+    const title = item.querySelector('span')?.textContent || 'Conversa';
+    const open = () => openChatConversation(item.dataset.conversationId, title);
     item.addEventListener('click', open);
     item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
   });
@@ -589,7 +592,7 @@ function showModalError(box, msg) {
 
 async function createConversation(projectId) {
   const res = await api('/api/projects/' + projectId + '/conversations', jsonPost({ title: 'Nova conversa' }));
-  if (res && res.conversationId) await renderProjectDetail(projectId);
+  if (res && res.conversationId) openChatConversation(res.conversationId, 'Nova conversa');
 }
 
 function jsonPost(body) {
@@ -633,6 +636,332 @@ async function projectAction(fn) {
   if (hash.startsWith('#/project/')) await renderProjectDetail(hash.split('/')[2]);
   else await renderProjects();
 }
+
+// ---------- Chat (conversas por projeto) ----------
+
+let chatTabs = loadChatTabs();
+let chatSession = { convId: null, runId: null, lastSeq: 0, streaming: false };
+
+function loadChatTabs() {
+  try { const t = JSON.parse(localStorage.getItem('paa.chatTabs') || '[]'); return Array.isArray(t) ? t : []; }
+  catch { return []; }
+}
+function saveChatTabs() { localStorage.setItem('paa.chatTabs', JSON.stringify(chatTabs)); }
+
+function openChatConversation(convId, title) {
+  if (!chatTabs.some(t => t.id === convId)) { chatTabs.push({ id: convId, title: title || 'Conversa' }); saveChatTabs(); }
+  location.hash = '#/chat/' + convId;
+}
+
+function closeChatTab(convId) {
+  const wasActive = chatSession.convId === convId;
+  chatTabs = chatTabs.filter(t => t.id !== convId);
+  saveChatTabs();
+  if (wasActive) { chatSession = { convId: null, runId: null, lastSeq: 0, streaming: false }; }
+  const next = chatTabs[chatTabs.length - 1];
+  location.hash = next ? '#/chat/' + next.id : '#/chat';
+  if (!$('#view-chat').classList.contains('hidden')) renderChat(next ? next.id : null);
+}
+
+function scrollChatTimeline() {
+  const t = $('#chat-timeline');
+  if (t) t.scrollTop = t.scrollHeight;
+}
+
+function chatMsgHtml(role, who, content) {
+  return `<div class="chat-msg chat-msg--${role}"><div class="chat-msg__who">${esc(who)}</div><div class="chat-msg__body">${esc(content)}</div></div>`;
+}
+
+async function renderChat(convId) {
+  if (!convId) convId = chatTabs.length ? chatTabs[chatTabs.length - 1].id : null;
+  const view = $('#view-chat');
+
+  if (!convId) {
+    view.innerHTML = `
+      <h2 class="ds-heading-2xl" style="margin-bottom:16px;">Chat</h2>
+      <div class="ds-empty-state">
+        <i data-lucide="message-square" class="ds-empty-state__icon"></i>
+        <h3 class="ds-empty-state__title">Nenhuma conversa aberta</h3>
+        <p class="ds-empty-state__description">Abra uma conversa a partir de um projeto para começar.</p>
+        <a class="ds-btn ds-btn--primary" href="#/projects" style="margin-top:12px;"><i data-lucide="folder-git-2" class="ds-icon ds-icon--sm"></i> Ir para projetos</a>
+      </div>`;
+    refreshIcons();
+    return;
+  }
+
+  if (!chatTabs.some(t => t.id === convId)) { chatTabs.push({ id: convId, title: 'Conversa' }); saveChatTabs(); }
+
+  const data = await api('/api/conversations/' + convId);
+  const meta = data.meta || {};
+  const title = meta.title || (chatTabs.find(t => t.id === convId)?.title) || 'Conversa';
+  // Mantém o título da aba em sincronia
+  const tab = chatTabs.find(t => t.id === convId);
+  if (tab && meta.title) { tab.title = meta.title; saveChatTabs(); }
+
+  const messagesHtml = (data.messages || []).map(m =>
+    chatMsgHtml(m.role, m.role === 'user' ? 'Você' : (m.agent_id || 'Aria'), m.content)
+  ).join('') || `<div class="chat-empty ds-text-muted ds-body-sm">Envie a primeira mensagem para começar.</div>`;
+
+  view.innerHTML = `
+    <div class="chat-tabs" id="chat-tabs">${chatTabsHtml(convId)}</div>
+    <div class="chat-panel">
+      <div class="chat-header">
+        <input class="chat-title-input" id="chat-title" value="${esc(title)}" aria-label="Título da conversa">
+        <div class="chat-actions">
+          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-pin" title="${meta.pinned ? 'Desafixar' : 'Fixar'}"><i data-lucide="pin" class="ds-icon ds-icon--xs" style="${meta.pinned ? 'color:var(--ds-action-primary)' : ''}"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-fork" title="Duplicar"><i data-lucide="copy" class="ds-icon ds-icon--xs"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-archive" title="${meta.archived ? 'Desarquivar' : 'Arquivar'}"><i data-lucide="archive" class="ds-icon ds-icon--xs"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--sm project-danger" id="chat-delete" title="Apagar"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
+        </div>
+      </div>
+      <div class="chat-timeline" id="chat-timeline">${messagesHtml}</div>
+      <div class="chat-composer">
+        <textarea class="ds-textarea chat-input" id="chat-input" rows="1" placeholder="Envie uma mensagem..."></textarea>
+        <button class="ds-btn ds-btn--danger hidden" id="chat-cancel"><i data-lucide="square" class="ds-icon ds-icon--xs"></i> Cancelar</button>
+        <button class="ds-btn ds-btn--primary" id="chat-send" title="Enviar"><i data-lucide="send" class="ds-icon ds-icon--sm"></i></button>
+      </div>
+    </div>`;
+
+  // Estado do run em andamento (retomada após refresh)
+  if (data.activeRun) {
+    chatSession = { convId, runId: data.activeRun.id, lastSeq: 0, streaming: true };
+    ensureLiveBubble(data.activeRun.agentId);
+    applyRunEventList(data.activeRun.events);
+    setChatComposerState(true);
+  } else {
+    chatSession = { convId, runId: null, lastSeq: 0, streaming: false };
+    setChatComposerState(false);
+  }
+
+  wireChatControls(convId, meta);
+  scrollChatTimeline();
+  refreshIcons();
+}
+
+function chatTabsHtml(activeId) {
+  if (!chatTabs.length) return '';
+  return chatTabs.map(t => `
+    <div class="chat-tab${t.id === activeId ? ' is-active' : ''}" data-chat-tab="${esc(t.id)}" role="tab" tabindex="0">
+      <span class="chat-tab__label">${esc(t.title)}</span>
+      <button class="chat-tab__close" data-chat-close="${esc(t.id)}" title="Fechar" aria-label="Fechar aba"><i data-lucide="x" class="ds-icon ds-icon--xs"></i></button>
+    </div>`).join('');
+}
+
+function wireChatControls(convId, meta) {
+  const input = $('#chat-input');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(convId); }
+  });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+  $('#chat-send').addEventListener('click', () => sendChatMessage(convId));
+  $('#chat-cancel').addEventListener('click', cancelChatRun);
+
+  const titleInput = $('#chat-title');
+  const commitTitle = async () => {
+    const t = titleInput.value.trim();
+    if (!t || t === meta.title) return;
+    await api('/api/conversations/' + convId, jsonPatch({ title: t }));
+    const tab = chatTabs.find(x => x.id === convId);
+    if (tab) { tab.title = t; saveChatTabs(); $('#chat-tabs').innerHTML = chatTabsHtml(convId); refreshIcons(); }
+  };
+  titleInput.addEventListener('blur', commitTitle);
+  titleInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); } });
+
+  $('#chat-pin').addEventListener('click', async () => {
+    await api('/api/conversations/' + convId, jsonPatch({ pinned: !meta.pinned }));
+    renderChat(convId);
+  });
+  $('#chat-archive').addEventListener('click', async () => {
+    await api('/api/conversations/' + convId, jsonPatch({ archived: !meta.archived }));
+    if (!meta.archived) closeChatTab(convId); else renderChat(convId);
+  });
+  $('#chat-fork').addEventListener('click', async () => {
+    const res = await api('/api/conversations/' + convId + '/fork', jsonPost({}));
+    if (res && res.conversationId) openChatConversation(res.conversationId, (meta.title || 'Conversa') + ' (cópia)');
+  });
+  $('#chat-delete').addEventListener('click', () => openDeleteConversationModal(convId, meta.title || 'esta conversa'));
+}
+
+function openDeleteConversationModal(convId, title) {
+  openModal(`
+    <div class="ds-modal__header">
+      <h3 class="ds-modal__title">Apagar conversa</h3>
+      <button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button>
+    </div>
+    <div class="ds-modal__body">
+      <p class="ds-body-sm">Apagar <b>${esc(title)}</b> e todas as suas mensagens? Esta ação não pode ser desfeita.</p>
+    </div>
+    <div class="ds-modal__footer">
+      <button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button>
+      <button class="ds-btn ds-btn--danger" id="dc-submit">Apagar</button>
+    </div>
+  `);
+  $('#dc-submit').addEventListener('click', async () => {
+    await api('/api/conversations/' + convId, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    closeModal();
+    closeChatTab(convId);
+  });
+}
+
+// --- Envio / streaming ---
+
+function setChatComposerState(streaming) {
+  const send = $('#chat-send');
+  const cancel = $('#chat-cancel');
+  const input = $('#chat-input');
+  if (send) send.disabled = streaming;
+  if (cancel) cancel.classList.toggle('hidden', !streaming);
+  if (input) input.disabled = streaming;
+}
+
+function appendChatBubble(role, who, content) {
+  const t = $('#chat-timeline');
+  if (!t) return;
+  $('#chat-timeline .chat-empty')?.remove();
+  const div = document.createElement('div');
+  div.className = `chat-msg chat-msg--${role} ds-anim-enter-slide-up`;
+  div.innerHTML = `<div class="chat-msg__who">${esc(who)}</div><div class="chat-msg__body">${esc(content)}</div>`;
+  t.appendChild(div);
+  scrollChatTimeline();
+}
+
+function ensureLiveBubble(agentName) {
+  let b = $('#chat-live-bubble');
+  if (!b) {
+    const t = $('#chat-timeline');
+    $('#chat-timeline .chat-empty')?.remove();
+    b = document.createElement('div');
+    b.className = 'chat-msg chat-msg--assistant';
+    b.id = 'chat-live-bubble';
+    b.innerHTML = `<div class="chat-msg__who">${esc(agentName || 'Aria')}</div><div class="chat-tools" id="chat-live-tools"></div><div class="chat-msg__body"><span class="text"></span><span class="cursor ds-anim-blink"></span></div>`;
+    t.appendChild(b);
+    scrollChatTimeline();
+  }
+  return b;
+}
+
+function appendLiveDelta(text) {
+  const b = ensureLiveBubble();
+  b.querySelector('.text').textContent += text;
+  scrollChatTimeline();
+}
+
+function addLiveToolCard(tool) {
+  const c = $('#chat-live-tools') || ensureLiveBubble().querySelector('.chat-tools');
+  if (!c) return;
+  const card = document.createElement('div');
+  card.className = 'tool-card';
+  card.innerHTML = `
+    <button class="tool-card__head" type="button"><i data-lucide="wrench" class="ds-icon ds-icon--xs"></i> <b>${esc(tool)}</b> <i data-lucide="chevron-down" class="ds-icon ds-icon--xs tool-card__chev"></i></button>
+    <div class="tool-card__body ds-caption">Ferramenta executada: <code class="ds-code">${esc(tool)}</code></div>`;
+  c.appendChild(card);
+  refreshIcons();
+}
+
+function finalizeLiveBubble() {
+  const b = $('#chat-live-bubble');
+  if (!b) return;
+  b.querySelector('.cursor')?.remove();
+  b.removeAttribute('id');
+  b.querySelector('#chat-live-tools')?.removeAttribute('id');
+}
+
+/** Aplica uma lista de run_events (retomada/reconciliação) à bolha ativa, com dedup por sequence. */
+function applyRunEventList(events) {
+  for (const ev of events || []) {
+    if (ev.sequence <= chatSession.lastSeq) continue;
+    chatSession.lastSeq = ev.sequence;
+    let pl = {};
+    try { pl = ev.payload_json ? JSON.parse(ev.payload_json) : {}; } catch { pl = {}; }
+    if (ev.type === 'text_delta') appendLiveDelta(pl.text || '');
+    else if (ev.type === 'tool_start') addLiveToolCard(pl.tool);
+  }
+}
+
+/**
+ * Reconcilia os eventos já persistidos de um run com o que o cliente tem. Fecha
+ * a janela entre o run começar a emitir (antes do cliente saber o runId) e o
+ * streaming SSE. O SSE continua dali em diante (dedup por sequence).
+ */
+async function syncRunEvents(runId) {
+  const data = await api('/api/runs/' + runId + '/events?after=' + chatSession.lastSeq);
+  if (!data || !data.run) return;
+  applyRunEventList(data.events);
+  if (['done', 'failed', 'cancelled', 'timed_out'].includes(data.run.status)) {
+    finalizeLiveBubble();
+    chatSession.streaming = false;
+    setChatComposerState(false);
+  }
+}
+
+async function sendChatMessage(convId) {
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text || chatSession.streaming) return;
+  input.value = '';
+  input.style.height = 'auto';
+  appendChatBubble('user', 'Você', text);
+  const res = await api('/api/conversations/' + convId + '/messages', jsonPost({ text }));
+  if (res.error || !res.runId) { appendChatBubble('error', 'Sistema', res.error || 'Falha ao enviar mensagem.'); return; }
+  chatSession = { convId, runId: res.runId, lastSeq: 0, streaming: true };
+  setChatComposerState(true);
+  ensureLiveBubble('Aria');
+  // Recupera eventos já emitidos antes de o cliente conhecer o runId.
+  await syncRunEvents(res.runId);
+}
+
+function cancelChatRun() {
+  if (!chatSession.runId) return;
+  $('#chat-cancel')?.setAttribute('disabled', 'true');
+  void api('/api/runs/' + chatSession.runId + '/cancel', jsonPost({}));
+}
+
+/** Roteia eventos SSE para a conversa ativa do chat. Não consome (o feed global também os recebe). */
+function handleChatEvent(evt) {
+  if ($('#view-chat').classList.contains('hidden')) return;
+  const p = evt.payload || {};
+  if (!chatSession.convId || p.conversationId !== chatSession.convId) return;
+  switch (evt.type) {
+    case 'stream_delta':
+      if (p.runId && p.runId === chatSession.runId) {
+        if (p.seq && p.seq <= chatSession.lastSeq) return;
+        if (p.seq) chatSession.lastSeq = p.seq;
+        appendLiveDelta(p.text || '');
+      }
+      break;
+    case 'tool_call':
+      if (p.runId === chatSession.runId) {
+        if (p.seq) chatSession.lastSeq = Math.max(chatSession.lastSeq, p.seq);
+        addLiveToolCard(p.toolName);
+      }
+      break;
+    case 'stream_end':
+      if (p.runId === chatSession.runId) {
+        finalizeLiveBubble();
+        chatSession.streaming = false;
+        setChatComposerState(false);
+      }
+      break;
+    case 'error':
+      if (p.runId === chatSession.runId) {
+        finalizeLiveBubble();
+        appendChatBubble('error', 'Sistema', p.text || 'Erro na execução.');
+        chatSession.streaming = false;
+        setChatComposerState(false);
+      }
+      break;
+  }
+}
+
+// Delegação de clique para abas e tool cards (sobrevive a re-renders)
+document.addEventListener('click', event => {
+  const closeEl = closestFromEvent(event, '[data-chat-close]');
+  if (closeEl) { event.stopPropagation(); closeChatTab(closeEl.dataset.chatClose); return; }
+  const tabEl = closestFromEvent(event, '[data-chat-tab]');
+  if (tabEl) { location.hash = '#/chat/' + tabEl.dataset.chatTab; return; }
+  const toolHead = closestFromEvent(event, '.tool-card__head');
+  if (toolHead) { toolHead.closest('.tool-card')?.classList.toggle('is-open'); }
+});
 
 // ---------- Estado global / topbar ----------
 
@@ -1231,6 +1560,7 @@ function addBubble(html, cls = '') {
 }
 
 function handleEvent(evt) {
+  handleChatEvent(evt);
   const p = evt.payload;
   switch (evt.type) {
     case 'stream_start': {

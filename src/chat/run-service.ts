@@ -71,6 +71,16 @@ const defaultExecutor: TurnExecutor = async ({ agentId, messages, handlers, abor
   );
 };
 
+let executorOverride: TurnExecutor | null = null;
+
+/**
+ * Substitui o executor padrão do turno (usado por previews/dev sem LLM). Em
+ * produção nunca é chamado — o executor real (agente) permanece o padrão.
+ */
+export function setChatExecutorOverride(fn: TurnExecutor | null): void {
+  executorOverride = fn;
+}
+
 /**
  * Inicia um turno de chat: cria o run, persiste a mensagem do usuário e dispara
  * a execução assíncrona. Retorna imediatamente com o runId; o streaming continua
@@ -105,7 +115,7 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
     runId,
   });
 
-  const executor = input.executor ?? defaultExecutor;
+  const executor = input.executor ?? executorOverride ?? defaultExecutor;
   const timeoutMs = input.timeoutMs ?? getConfig().delegation.timeoutSec * 1000;
   const done = executeRun(runId, ctx.projectId, ctx.agentId, input.conversationId, executor, timeoutMs);
   return { runId, done };
@@ -136,12 +146,12 @@ async function executeRun(
 
     const handlers: TurnHandlers = {
       onTextDelta: (text) => {
-        appendRunEvent(runId, 'text_delta', { text });
-        emitBus('stream_delta', { agentId, text, projectId, conversationId, runId });
+        const seq = appendRunEvent(runId, 'text_delta', { text });
+        emitBus('stream_delta', { agentId, text, projectId, conversationId, runId, seq });
       },
       onToolCall: (toolName) => {
-        appendRunEvent(runId, 'tool_start', { tool: toolName });
-        emitBus('tool_call', { agentId, toolName, projectId, conversationId, runId });
+        const seq = appendRunEvent(runId, 'tool_start', { tool: toolName });
+        emitBus('tool_call', { agentId, toolName, projectId, conversationId, runId, seq });
       },
     };
 
