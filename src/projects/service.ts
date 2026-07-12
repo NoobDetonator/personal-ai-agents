@@ -161,14 +161,18 @@ export function createProject(input: CreateProjectInput): Project {
   }
 }
 
-export function updateProject(id: string, patch: { name?: string; description?: string | null }): Project | null {
+export function updateProject(
+  id: string,
+  patch: { name?: string; description?: string | null; status?: 'active' | 'archived' },
+): Project | null {
   const db = getDb();
   const existing = getProject(id);
   if (!existing) return null;
   const name = patch.name?.trim() || existing.name;
   const description = patch.description !== undefined ? patch.description : existing.description;
-  db.prepare(`UPDATE projects SET name = ?, description = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(name, description, id);
+  const status = patch.status === 'active' || patch.status === 'archived' ? patch.status : existing.status;
+  db.prepare(`UPDATE projects SET name = ?, description = ?, status = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(name, description, status, id);
   return getProject(id);
 }
 

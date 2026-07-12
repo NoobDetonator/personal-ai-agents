@@ -24,7 +24,8 @@
       </div>
 
       <nav class="ds-sidebar__nav" id="nav">
-        <button class="ds-sidebar__item is-active" data-view="overview"><i data-lucide="layout-dashboard" class="ds-icon ds-icon--sm"></i> Visão geral</button>
+        <button class="ds-sidebar__item is-active" data-view="projects"><i data-lucide="folder-git-2" class="ds-icon ds-icon--sm"></i> Projetos</button>
+        <button class="ds-sidebar__item" data-view="overview"><i data-lucide="layout-dashboard" class="ds-icon ds-icon--sm"></i> Visão geral</button>
         <button class="ds-sidebar__item" data-view="live"><i data-lucide="messages-square" class="ds-icon ds-icon--sm"></i> Chat ao vivo</button>
         <button class="ds-sidebar__item" data-view="agents"><i data-lucide="users" class="ds-icon ds-icon--sm"></i> Agentes</button>
         <button class="ds-sidebar__item" data-view="board"><i data-lucide="kanban-square" class="ds-icon ds-icon--sm"></i> Board</button>
@@ -47,12 +48,19 @@
 
     <main class="app-main">
       <header class="app-topbar">
+        <div class="app-switcher">
+          <i data-lucide="folder-git-2" class="ds-icon ds-icon--xs ds-text-muted"></i>
+          <select class="ds-select app-switcher__select" id="project-switcher" title="Projeto ativo"></select>
+          <button class="ds-btn ds-btn--primary ds-btn--sm" id="new-project-top" title="Novo projeto"><i data-lucide="plus" class="ds-icon ds-icon--xs"></i> Novo</button>
+        </div>
         <span class="ds-chip" id="top-model"><i data-lucide="cpu" class="ds-icon ds-icon--xs"></i> —</span>
         <span class="ds-chip" id="top-shell"><i data-lucide="terminal" class="ds-icon ds-icon--xs"></i> shell: —</span>
         <span class="ds-chip" id="top-tokens"><i data-lucide="coins" class="ds-icon ds-icon--xs"></i> —</span>
       </header>
 
-      <section id="view-overview" class="app-view"></section>
+      <section id="view-projects" class="app-view"></section>
+      <section id="view-project-detail" class="app-view hidden"></section>
+      <section id="view-overview" class="app-view hidden"></section>
       <section id="view-live" class="app-view hidden">
         <h2 class="ds-heading-2xl" style="margin-bottom:16px;">Chat ao vivo</h2>
         <div id="live-feed" class="live-feed"></div>
@@ -64,6 +72,8 @@
       <section id="view-settings" class="app-view hidden"></section>
     </main>
   </div>
+
+  <div id="modal-root"></div>
 
   <script src="agent-icons.js"></script>
   <script src="charts.js"></script>

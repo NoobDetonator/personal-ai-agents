@@ -391,9 +391,11 @@ async function handleCreateProject(req: http.IncomingMessage, res: http.ServerRe
 
 async function handlePatchProject(req: http.IncomingMessage, res: http.ServerResponse, id: string): Promise<void> {
   const body = await readBody(req);
+  const status = body.status === 'active' || body.status === 'archived' ? body.status : undefined;
   const updated = updateProject(id, {
     name: body.name != null ? String(body.name) : undefined,
     description: body.description !== undefined ? (body.description === null ? null : String(body.description)) : undefined,
+    status,
   });
   return updated ? json(res, 200, { project: updated }) : json(res, 404, { error: 'projeto nao encontrado' });
 }

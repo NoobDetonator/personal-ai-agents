@@ -147,11 +147,15 @@ test('DELETE projeto exige confirmName exato', async () => {
   assert.equal(gone.status, 404);
 });
 
-test('archive marca o projeto como archived', async () => {
+test('archive marca o projeto como archived e PATCH status restaura', async () => {
   const proj = await api('POST', '/api/projects', { name: 'Arquivar' });
   const pid = proj.json.project.id;
   const arch = await api('POST', `/api/projects/${pid}/archive`);
   assert.equal(arch.status, 200);
   const detail = await api('GET', `/api/projects/${pid}`);
   assert.equal(detail.json.project.status, 'archived');
+
+  const restore = await api('PATCH', `/api/projects/${pid}`, { status: 'active' });
+  assert.equal(restore.status, 200);
+  assert.equal(restore.json.project.status, 'active');
 });
