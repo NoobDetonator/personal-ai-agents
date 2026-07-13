@@ -283,6 +283,10 @@ function apiAnalytics(params: URLSearchParams): unknown {
   const idPattern = /^[a-z0-9_-]+$/i;
   const agent = params.get('agent') ?? undefined;
   const team = params.get('team') ?? undefined;
+  const knownProjects = new Set(listProjects().map(project => project.id));
+  const projects = [...new Set(params.getAll('project'))]
+    .filter(id => idPattern.test(id) && knownProjects.has(id))
+    .slice(0, 50);
 
   const agents = Object.entries(config.agents).map(([id, cfg]) => ({
     id,
@@ -294,6 +298,7 @@ function apiAnalytics(params: URLSearchParams): unknown {
     range,
     agent: agent && idPattern.test(agent) ? agent : undefined,
     team: team && idPattern.test(team) ? team : undefined,
+    projects: projects.length ? projects : undefined,
   });
 }
 

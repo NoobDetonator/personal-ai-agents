@@ -263,3 +263,22 @@ test('API de arquivos lista, le, busca e serve imagem com isolamento', async () 
   const rawText = await api('GET', `/api/projects/${project.id}/file/raw?path=${encodeURIComponent('src/app.ts')}`);
   assert.equal(rawText.status, 415);
 });
+
+test('GET /api/analytics aceita filtro multiplo de projetos', async () => {
+  const p1 = svc.createProject({ name: 'Analytics HTTP A' });
+  const p2 = svc.createProject({ name: 'Analytics HTTP B' });
+  const db = connection.getDb();
+  db.prepare(`INSERT INTO conversations (id, agent_id, project_id) VALUES ('analytics-http-a', 'aria', ?), ('analytics-http-b', 'aria', ?)`).run(p1.id, p2.id);
+  db.prepare(`INSERT INTO messages (id, conversation_id, role, content, agent_id, input_tokens, output_tokens)
+    VALUES ('analytics-http-ma', 'analytics-http-a', 'assistant', 'a', 'aria', 7, 3),
+           ('analytics-http-mb', 'analytics-http-b', 'assistant', 'b', 'aria', 11, 4)`).run();
+
+  const one = await api('GET', `/api/analytics?range=24h&project=${p1.id}`);
+  assert.equal(one.status, 200);
+  assert.deepEqual(one.json.scope.projects, [p1.id]);
+  assert.equal(one.json.kpis.tokens.current, 10);
+
+  const multiple = await api('GET', `/api/analytics?range=24h&project=${p1.id}&project=${p2.id}`);
+  assert.deepEqual(multiple.json.scope.projects, [p1.id, p2.id]);
+  assert.equal(multiple.json.kpis.tokens.current, 25);
+});

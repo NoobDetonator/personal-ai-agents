@@ -39,6 +39,7 @@ function roleBadge(role) {
 
 const PROFILE_STATUS = {
   manual: {
+
     label: 'Soul manual',
     shortLabel: 'soul manual',
     variant: 'info',
@@ -1318,12 +1319,13 @@ async function refreshState() {
 
 // ---------- Visao geral ----------
 
-let overviewFilters = { range: '7d', team: '', agent: '' };
+let overviewFilters = { range: '7d', team: '', agent: '', projects: [] };
 try {
   const saved = JSON.parse(localStorage.getItem('paa.overviewFilters') || '{}');
   if (['24h', '7d', '30d'].includes(saved.range)) overviewFilters.range = saved.range;
   if (typeof saved.team === 'string') overviewFilters.team = saved.team;
   if (typeof saved.agent === 'string') overviewFilters.agent = saved.agent;
+  if (Array.isArray(saved.projects)) overviewFilters.projects = saved.projects.filter(id => typeof id === 'string');
 } catch { /* usa padrao */ }
 
 function saveOverviewFilters() {
@@ -1369,19 +1371,49 @@ async function renderOverview() {
   if (overviewFilters.agent && !state.agents.some(a => a.id === overviewFilters.agent)) overviewFilters.agent = '';
   const teams = [...new Set(state.agents.map(a => a.team).filter(Boolean))].sort();
   if (overviewFilters.team && !teams.includes(overviewFilters.team)) overviewFilters.team = '';
+  const knownProjectIds = new Set(projectsCache.map(project => project.id));
+  overviewFilters.projects = overviewFilters.projects.filter(id => knownProjectIds.has(id));
 
   const qs = new URLSearchParams({ range: overviewFilters.range });
   if (overviewFilters.team) qs.set('team', overviewFilters.team);
   if (overviewFilters.agent) qs.set('agent', overviewFilters.agent);
+  for (const projectId of overviewFilters.projects) qs.append('project', projectId);
   const an = await api('/api/analytics?' + qs.toString());
   const k = an.kpis;
+  const op = an.operational;
 
   // --- Barra de filtros ---
   const agentOptions = state.agents.filter(a => !overviewFilters.team || a.team === overviewFilters.team);
   const rangeBtn = (key) =>
     `<button class="ov-seg__btn${overviewFilters.range === key ? ' is-active' : ''}" data-range="${key}">${RANGE_LABEL[key].replace('últimas ', '').replace('últimos ', '')}</button>`;
+  const selectedProjectSet = new Set(overviewFilters.projects);
+  const projectScopeLabel = !overviewFilters.projects.length
+    ? 'Todos os projetos'
+    : overviewFilters.projects.length === 1
+      ? (projectsCache.find(project => project.id === overviewFilters.projects[0])?.name || '1 projeto')
+      : `${overviewFilters.projects.length} projetos`;
+  const projectFilter = `
+    <details class="ov-project-filter" id="ov-project-filter">
+      <summary><i data-lucide="layers-3" class="ds-icon ds-icon--xs"></i><span>${esc(projectScopeLabel)}</span><i data-lucide="chevron-down" class="ds-icon ds-icon--xs"></i></summary>
+      <div class="ov-project-menu">
+        <div class="ov-project-menu__head"><b>Escopo dos dados</b><span class="ds-caption">Seleção múltipla</span></div>
+        <div class="ov-project-menu__actions">
+          <button type="button" id="ov-project-all">Todos</button>
+          ${activeProjectId ? '<button type="button" id="ov-project-active">Projeto ativo</button>' : ''}
+        </div>
+        <div class="ov-project-options">
+          ${projectsCache.map(project => `
+            <label class="ov-project-option">
+              <input type="checkbox" data-ov-project="${esc(project.id)}"${selectedProjectSet.has(project.id) ? ' checked' : ''}>
+              <span><b>${esc(project.name)}</b><small>${project.status === 'archived' ? 'Arquivado' : 'Ativo'}</small></span>
+            </label>`).join('')}
+        </div>
+      </div>
+    </details>`;
+
   const filterBar = `
     <div class="ov-filters">
+      ${projectFilter}
       <div class="ov-seg">${rangeBtn('24h')}${rangeBtn('7d')}${rangeBtn('30d')}</div>
       <select class="ds-select ov-select" id="ov-team" title="Filtrar por equipe">
         <option value="">Todas as equipes</option>
@@ -1412,6 +1444,14 @@ async function renderOverview() {
         trendChip(k.cost, { goodWhenUp: false }))}
       ${kpiCard('Cache aproveitado', fmtPct(k.cacheRate.current),
         'do input reutilizado', trendChip(k.cacheRate, { mode: 'pp' }))}
+      ${kpiCard('Runs', op.runs.current,
+        op.avgRunMs != null ? `média ${(op.avgRunMs / 1000).toFixed(1)}s · ${op.runsDone} concluídos` : 'sem execuções registradas',
+        trendChip(op.runs))}
+      ${kpiCard('Tool calling', fmtPct(op.toolCallRate.current),
+        `${op.toolCalls.current} chamadas de ferramenta`, trendChip(op.toolCallRate, { mode: 'pp' }))}
+      ${kpiCard('Timeouts', op.runsTimedOut,
+        `${op.runsFailed} falhas · ${op.runsCancelled} cancelados`,
+        op.runsTimedOut ? '<span class="ds-stat-card__trend ds-stat-card__trend--down">requer atenção</span>' : '<span class="ds-stat-card__trend ds-stat-card__trend--up">sem timeouts</span>')}
     </div>`;
 
   // --- Graficos ---
@@ -1444,6 +1484,37 @@ async function renderOverview() {
       </div>
     </div>`;
 
+  const runItems = [
+    { label: 'Concluídos', value: op.runsDone || 0, color: 'var(--ds-feedback-success)' },
+    { label: 'Em execução', value: (an.runStatus.running || 0) + (an.runStatus.waiting_confirmation || 0), color: 'var(--ds-feedback-warning)' },
+    { label: 'Falharam', value: op.runsFailed || 0, color: 'var(--ds-feedback-danger)' },
+    { label: 'Timeout', value: op.runsTimedOut || 0, color: 'var(--ds-feedback-violet)' },
+    { label: 'Cancelados', value: op.runsCancelled || 0, color: 'var(--ds-text-disabled)' },
+  ];
+  const projectRows = (an.projectBreakdown || []).map(project => {
+    const totalTokens = project.inputTokens + project.outputTokens;
+    return `
+      <div class="project-analytics-row" data-project-analytics="${esc(project.projectId)}">
+        <span class="project-analytics-row__name"><i data-lucide="${project.projectId === 'legacy' ? 'archive' : 'folder-git-2'}" class="ds-icon ds-icon--sm"></i><span><b>${esc(project.name)}</b><small>${esc(project.status)}</small></span></span>
+        <span><b>${fmtTokens(totalTokens)}</b><small>tokens</small></span>
+        <span><b>${project.costKnown ? '' : '≥ '}${fmtCost(project.cost)}</b><small>custo</small></span>
+        <span><b>${project.runs}</b><small>runs</small></span>
+        <span><b>${project.toolCalls}</b><small>tools</small></span>
+        <span class="${project.timeouts ? 'project-analytics-row__danger' : ''}"><b>${project.timeouts}</b><small>timeouts</small></span>
+      </div>`;
+  }).join('');
+  const operationalRow = `
+    <div class="ov-charts ov-charts--operations">
+      <div class="ds-card">
+        <div class="ds-card__header"><h3 class="ds-card__title">Saúde das execuções</h3><span class="ds-caption">${fmtPct(op.successRate.current)} de sucesso</span></div>
+        <div class="chart-surface chart-surface--center">${dsCharts.donut(runItems, { centerLabel: 'runs', ariaLabel: 'Status das execuções' })}</div>
+      </div>
+      <div class="ds-card project-analytics-card">
+        <div class="ds-card__header"><h3 class="ds-card__title">Atividade por projeto</h3><span class="ds-caption">totais do escopo selecionado</span></div>
+        <div class="project-analytics-list">${projectRows || '<div class="file-empty file-empty--compact"><p>Sem atividade no período.</p></div>'}</div>
+      </div>
+    </div>`;
+
   // --- Carga por agente ---
   const maxLoad = Math.max(...(an.agentLoad || []).map(a => a.inputTokens + a.outputTokens), 1);
   const loadRows = (an.agentLoad || []).map(a => {
@@ -1460,7 +1531,7 @@ async function renderOverview() {
           <span style="width:${((a.inputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-action-primary);"></span>
           <span style="width:${((a.outputTokens / maxLoad) * 100).toFixed(1)}%;background:var(--ds-feedback-violet);"></span>
         </div>
-        <span class="ds-caption load-row__meta">${fmtTokens(total)} tokens · ${a.messages} msgs</span>
+        <span class="ds-caption load-row__meta">${fmtTokens(total)} tokens · ${a.messages} msgs · ${a.runs} runs · ${a.toolCalls} tools</span>
         <span class="load-row__tasks">${taskChips}</span>
       </div>`;
   }).join('');
@@ -1531,6 +1602,7 @@ async function renderOverview() {
     </div>
     ${stats}
     ${chartsRow}
+    ${operationalRow}
     ${loadCard}
     <div class="ds-card" style="margin-bottom:16px;">
       <div class="ds-card__header"><h3 class="ds-card__title">Hierarquia dos agentes</h3></div>
@@ -1554,6 +1626,25 @@ async function renderOverview() {
       renderOverview();
     });
   });
+  document.querySelectorAll('[data-ov-project]').forEach(input => {
+    input.addEventListener('change', () => {
+      const selected = Array.from(document.querySelectorAll('[data-ov-project]:checked')).map(item => item.dataset.ovProject);
+      overviewFilters.projects = selected.length === projectsCache.length ? [] : selected;
+      saveOverviewFilters();
+      renderOverview();
+    });
+  });
+  $('#ov-project-all')?.addEventListener('click', () => {
+    overviewFilters.projects = [];
+    saveOverviewFilters();
+    renderOverview();
+  });
+  $('#ov-project-active')?.addEventListener('click', () => {
+    overviewFilters.projects = activeProjectId ? [activeProjectId] : [];
+    saveOverviewFilters();
+    renderOverview();
+  });
+
   $('#ov-team').onchange = e => {
     overviewFilters.team = e.target.value;
     overviewFilters.agent = '';

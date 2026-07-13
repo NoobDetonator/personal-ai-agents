@@ -162,6 +162,52 @@ describe('getAnalytics', () => {
     assert.equal(r.kpis.cost.known, false);
     db.close();
   });
+
+  it('filtra um ou varios projetos e agrega runs, tools e timeouts sem perder agente historico', () => {
+    const db = seedDb();
+    db.prepare(`INSERT INTO projects (id, name, slug, root_path) VALUES ('p2', 'Projeto Dois', 'projeto-dois', 'workspace/p2')`).run();
+    db.prepare(`INSERT INTO conversations (id, agent_id, project_id) VALUES ('conv2', 'ghost-agent', 'p2')`).run();
+    db.prepare(`INSERT INTO messages (id, conversation_id, role, content, agent_id, input_tokens, output_tokens, created_at)
+      VALUES ('m-p2', 'conv2', 'assistant', 'x', 'ghost-agent', 10, 5, ?)`).run(hoursAgo(1));
+    db.prepare(`INSERT INTO usage_events (id, agent_id, model, input_tokens, output_tokens, cost_usd, project_id, created_at)
+      VALUES ('u-p2', 'ghost-agent', 'deepseek-v4-flash', 10, 5, 0.0001, 'p2', ?)`).run(hoursAgo(1));
+    db.prepare(`INSERT INTO tasks (id, title, assignee, status, team, project_id, created_at, updated_at)
+      VALUES ('t-p2', 'aberta', 'ghost-agent', 'pending', 'equipe-antiga', 'p2', ?, ?)`).run(hoursAgo(1), hoursAgo(1));
+    db.prepare(`INSERT INTO runs (id, project_id, conversation_id, agent_id, status, duration_ms, created_at)
+      VALUES ('r-p2-ok', 'p2', 'conv2', 'ghost-agent', 'done', 500, ?),
+             ('r-p2-timeout', 'p2', 'conv2', 'ghost-agent', 'timed_out', 3000, ?)`).run(hoursAgo(1), hoursAgo(1));
+    db.prepare(`INSERT INTO run_events (id, run_id, sequence, type) VALUES ('e-p2-tool', 'r-p2-ok', 1, 'tool_start')`).run();
+
+    const scoped = getAnalytics(db, AGENTS, { range: '24h', projects: ['p2'] });
+    assert.equal(scoped.scope.allProjects, false);
+    assert.deepEqual(scoped.scope.projects, ['p2']);
+    assert.equal(scoped.kpis.tokens.current, 15);
+    assert.equal(scoped.kpis.tasksPending, 1);
+    assert.equal(scoped.operational.runs.current, 2);
+    assert.equal(scoped.operational.runsTimedOut, 1);
+    assert.equal(scoped.operational.toolCalls.current, 1);
+    assert.equal(scoped.operational.toolCallRate.current, 0.5);
+    assert.equal(scoped.runStatus.done, 1);
+    assert.equal(scoped.runStatus.timed_out, 1);
+    assert.equal(scoped.projectBreakdown.length, 1);
+    assert.equal(scoped.projectBreakdown[0].projectId, 'p2');
+    const historical = scoped.agentLoad.find(agent => agent.agentId === 'ghost-agent');
+    assert.ok(historical);
+    assert.equal(historical.name, 'ghost-agent');
+    assert.equal(historical.team, 'equipe-antiga');
+    assert.equal(historical.runs, 2);
+
+    const all = getAnalytics(db, AGENTS, { range: '24h' });
+    const breakdownTokens = all.projectBreakdown.reduce((sum, project) => sum + project.inputTokens + project.outputTokens, 0);
+    const breakdownCost = all.projectBreakdown.reduce((sum, project) => sum + project.cost, 0);
+    assert.equal(breakdownTokens, all.kpis.tokens.current);
+    assert.ok(Math.abs(breakdownCost - all.kpis.cost.current) < 1e-9);
+
+    const multiple = getAnalytics(db, AGENTS, { range: '24h', projects: ['legacy', 'p2'] });
+    assert.equal(multiple.kpis.tokens.current, all.kpis.tokens.current);
+    db.close();
+  });
+
 });
 
 describe('computeCallCost', () => {

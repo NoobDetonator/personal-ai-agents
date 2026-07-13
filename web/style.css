@@ -867,3 +867,87 @@ body {
   .file-meta { width: 100%; justify-content: flex-end; }
   .file-markdown { padding: var(--p-space-5); }
 }
+
+/* Analytics por projeto e saúde operacional */
+.ov-project-filter { position: relative; flex: 0 0 auto; }
+.ov-project-filter > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-2);
+  min-width: 190px;
+  min-height: 40px;
+  padding: 0 var(--p-space-3);
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-text-secondary);
+  background: var(--ds-surface-neu-base);
+  box-shadow: var(--ds-shadow-outset-xs);
+  cursor: pointer;
+  list-style: none;
+}
+.ov-project-filter > summary::-webkit-details-marker { display: none; }
+.ov-project-filter > summary span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-project-filter[open] > summary { color: var(--ds-action-primary); box-shadow: var(--ds-shadow-inset-sm); }
+.ov-project-filter[open] > summary .ds-icon:last-child { transform: rotate(180deg); }
+.ov-project-menu {
+  position: absolute;
+  top: calc(100% + var(--p-space-2));
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  max-height: 420px;
+  padding: var(--p-space-3);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-neu-base);
+  box-shadow: var(--ds-shadow-outset-lg);
+}
+.ov-project-menu__head { display: flex; align-items: center; justify-content: space-between; gap: var(--p-space-2); padding: var(--p-space-1) var(--p-space-1) var(--p-space-3); }
+.ov-project-menu__actions { display: flex; gap: var(--p-space-2); padding-bottom: var(--p-space-2); border-bottom: 1px solid var(--ds-border-subtle); }
+.ov-project-menu__actions button {
+  border: 0;
+  border-radius: var(--ds-radius-full);
+  padding: var(--p-space-1-5) var(--p-space-2-5);
+  color: var(--ds-action-primary);
+  background: var(--ds-action-primary-subtle);
+  font: inherit;
+  font-size: var(--ds-caption-size);
+  cursor: pointer;
+}
+.ov-project-options { max-height: 280px; overflow: auto; padding-top: var(--p-space-2); }
+.ov-project-option { display: flex; align-items: center; gap: var(--p-space-2-5); padding: var(--p-space-2); border-radius: var(--ds-radius-md); cursor: pointer; }
+.ov-project-option:hover { background: var(--ds-action-primary-subtle); }
+.ov-project-option input { accent-color: var(--ds-action-primary); }
+.ov-project-option span { display: flex; flex: 1; justify-content: space-between; gap: var(--p-space-2); min-width: 0; }
+.ov-project-option b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-project-option small { color: var(--ds-text-muted); }
+.ov-charts--operations { grid-template-columns: minmax(280px, 2fr) minmax(460px, 3fr); }
+.project-analytics-card { min-width: 0; }
+.project-analytics-list { max-height: 310px; overflow: auto; }
+.project-analytics-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 2fr) repeat(5, minmax(64px, 1fr));
+  align-items: center;
+  gap: var(--p-space-3);
+  padding: var(--p-space-2-5) var(--p-space-3);
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+.project-analytics-row:last-child { border-bottom: 0; }
+.project-analytics-row > span { display: flex; flex-direction: column; min-width: 0; }
+.project-analytics-row > span b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-analytics-row > span small { color: var(--ds-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.project-analytics-row__name { flex-direction: row !important; align-items: center; gap: var(--p-space-2); }
+.project-analytics-row__name > span { display: flex; flex-direction: column; min-width: 0; }
+.project-analytics-row__danger b { color: var(--ds-feedback-danger-text); }
+
+@media (max-width: 1100px) {
+  .ov-charts--operations { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .ov-project-filter { width: 100%; }
+  .ov-project-filter > summary { width: 100%; }
+  .ov-project-menu { position: fixed; top: 72px; left: 12px; right: 12px; width: auto; }
+  .project-analytics-row { grid-template-columns: minmax(150px, 2fr) repeat(2, 1fr); }
+  .project-analytics-row > span:nth-child(4),
+  .project-analytics-row > span:nth-child(5),
+  .project-analytics-row > span:nth-child(6) { display: none; }
+}
