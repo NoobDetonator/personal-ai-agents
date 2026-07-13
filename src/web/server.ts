@@ -33,6 +33,14 @@ import {
   assignAgentToProject,
 } from '../projects/service.js';
 import {
+  listProjectFiles,
+  readProjectFile,
+  readProjectRawFile,
+  searchProjectFiles,
+  diffProjectFile,
+  ProjectFileError,
+} from '../projects/files-service.js';
+import {
   listProjectConversations,
   createProjectConversation,
   patchConversation,
@@ -520,6 +528,30 @@ function broadcast(event: BusEvent): void {
   }
 }
 
+function serveProjectRaw(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  projectId: string,
+  filePath: string,
+): void {
+  const file = readProjectRawFile(projectId, filePath);
+  setSecurityHeaders(res);
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; frame-ancestors 'self'");
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Cache-Control', 'private, no-cache');
+  res.setHeader('Content-Type', file.mime);
+  res.setHeader('Content-Length', String(file.size));
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+  res.setHeader('ETag', file.etag);
+  if (req.headers['if-none-match'] === file.etag) {
+    res.writeHead(304);
+    res.end();
+    return;
+  }
+  res.writeHead(200);
+  fs.createReadStream(file.absolute).pipe(res);
+}
+
 // --- Static files ---
 
 function serveStatic(urlPath: string, res: http.ServerResponse): void {
@@ -626,6 +658,31 @@ export function startWebServer(): void {
       if (method === 'GET' && p === '/api/projects') return json(res, 200, apiProjects(url.searchParams));
       if (method === 'POST' && p === '/api/projects') return await handleCreateProject(req, res);
 
+      const projectFilesMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/files$/i);
+      if (method === 'GET' && projectFilesMatch) {
+        return json(res, 200, listProjectFiles(projectFilesMatch[1], url.searchParams.get('path') ?? ''));
+      }
+
+      const projectRawMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/file\/raw$/i);
+      if (method === 'GET' && projectRawMatch) {
+        return serveProjectRaw(req, res, projectRawMatch[1], url.searchParams.get('path') ?? '');
+      }
+
+      const projectFileMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/file$/i);
+      if (method === 'GET' && projectFileMatch) {
+        return json(res, 200, readProjectFile(projectFileMatch[1], url.searchParams.get('path') ?? ''));
+      }
+
+      const projectSearchMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/search$/i);
+      if (method === 'GET' && projectSearchMatch) {
+        return json(res, 200, searchProjectFiles(projectSearchMatch[1], url.searchParams.get('q') ?? ''));
+      }
+
+      const projectDiffMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/diff$/i);
+      if (method === 'GET' && projectDiffMatch) {
+        return json(res, 200, diffProjectFile(projectDiffMatch[1], url.searchParams.get('path') ?? ''));
+      }
+
       const projMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})$/i);
       if (projMatch) {
         const pid = projMatch[1];
@@ -696,7 +753,7 @@ export function startWebServer(): void {
       res.setHeader('Allow', 'GET');
       return json(res, 405, { error: 'metodo nao permitido' });
     } catch (error) {
-      const status = error instanceof HttpError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProjectFileError ? error.status : 500;
       json(res, status, { error: error instanceof Error ? error.message : 'erro interno' });
     }
   });

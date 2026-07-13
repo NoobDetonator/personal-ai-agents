@@ -183,7 +183,7 @@ function aiBadge(provider, model) {
 
 // ---------- Navegacao ----------
 
-const views = ['projects', 'project-detail', 'chat', 'overview', 'live', 'agents', 'agent-detail', 'board', 'skills', 'settings'];
+const views = ['projects', 'project-detail', 'chat', 'overview', 'live', 'agents', 'agent-detail', 'board', 'files', 'skills', 'settings'];
 
 function show(view) {
   for (const v of views) {
@@ -215,6 +215,14 @@ async function router() {
   if (route === 'chat') {
     show('chat');
     await renderChat(param || null);
+    return;
+  }
+
+  if (route === 'files') {
+    show('files');
+    let filePath = null;
+    try { filePath = param ? decodeURIComponent(param) : null; } catch { filePath = null; }
+    await renderFiles(filePath);
     return;
   }
 
@@ -416,6 +424,7 @@ async function renderProjectDetail(id) {
       <div class="project-avatar project-avatar--lg${isLegacy ? ' project-avatar--legacy' : ''}"><i data-lucide="${isLegacy ? 'archive' : 'folder-git-2'}" class="ds-icon ds-icon--lg"></i></div>
       <h2 class="ds-heading-2xl">${esc(p.name)} ${p.status === 'archived' ? '<span class="ds-badge ds-badge--warning">arquivado</span>' : ''}</h2>
       <div class="project-detail-actions">
+        <a class="ds-btn ds-btn--outline ds-btn--sm" href="#/files"><i data-lucide="files" class="ds-icon ds-icon--xs"></i> Arquivos</a>
         ${isLegacy ? '' : `<button class="ds-btn ds-btn--outline ds-btn--sm" id="pd-edit"><i data-lucide="pencil" class="ds-icon ds-icon--xs"></i> Editar</button>`}
         ${isLegacy ? '' : (p.status === 'archived'
           ? `<button class="ds-btn ds-btn--outline ds-btn--sm" data-project-restore="${esc(p.id)}"><i data-lucide="archive-restore" class="ds-icon ds-icon--xs"></i> Restaurar</button>`
@@ -1040,6 +1049,256 @@ document.addEventListener('click', event => {
   const toolHead = closestFromEvent(event, '.tool-card__head');
   if (toolHead) { toolHead.closest('.tool-card')?.classList.toggle('is-open'); }
 });
+
+// ---------- Arquivos do projeto ----------
+
+let fileBrowser = { projectId: null, directory: '', document: null, search: null };
+
+function fileTabsKey(projectId) { return 'paa.fileTabs.' + projectId; }
+function loadFileTabs(projectId) {
+  try {
+    const tabs = JSON.parse(localStorage.getItem(fileTabsKey(projectId)) || '[]');
+    return Array.isArray(tabs) ? tabs.filter(item => item && typeof item.path === 'string').slice(-12) : [];
+  } catch { return []; }
+}
+function saveFileTabs(projectId, tabs) {
+  localStorage.setItem(fileTabsKey(projectId), JSON.stringify(tabs.slice(-12)));
+}
+function rememberFileTab(projectId, doc) {
+  const tabs = loadFileTabs(projectId).filter(tab => tab.path !== doc.path);
+  tabs.push({ path: doc.path, name: doc.name, viewer: doc.viewer });
+  saveFileTabs(projectId, tabs);
+  return tabs;
+}
+function closeFileTab(projectId, filePath) {
+  const tabs = loadFileTabs(projectId).filter(tab => tab.path !== filePath);
+  saveFileTabs(projectId, tabs);
+  if (fileBrowser.document?.path === filePath) {
+    const next = tabs[tabs.length - 1];
+    location.hash = next ? '#/files/' + encodeURIComponent(next.path) : '#/files';
+    if (!next && location.hash === '#/files') void renderFiles(null);
+  } else {
+    void renderFiles(fileBrowser.document?.path || null);
+  }
+}
+function openProjectFile(filePath) {
+  location.hash = '#/files/' + encodeURIComponent(filePath);
+}
+function fileParent(filePath) {
+  const parts = String(filePath || '').split('/').filter(Boolean);
+  parts.pop();
+  return parts.join('/');
+}
+function fmtBytes(bytes) {
+  if (bytes == null) return 'pasta';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+function fileIcon(entry) {
+  if (entry.kind === 'directory') return 'folder';
+  return ({ markdown: 'file-text', json: 'braces', csv: 'table-2', html: 'panel-top', image: 'image', pdf: 'file-type-2', code: 'file-code-2', text: 'file-text' })[entry.viewer] || 'file';
+}
+function fileBreadcrumbs(directory) {
+  const parts = String(directory || '').split('/').filter(Boolean);
+  let current = '';
+  const crumbs = [`<button class="file-crumb" data-file-dir="" title="Raiz"><i data-lucide="home" class="ds-icon ds-icon--xs"></i></button>`];
+  for (const part of parts) {
+    current = current ? current + '/' + part : part;
+    crumbs.push(`<i data-lucide="chevron-right" class="ds-icon ds-icon--xs ds-text-muted"></i><button class="file-crumb" data-file-dir="${esc(current)}">${esc(part)}</button>`);
+  }
+  return crumbs.join('');
+}
+function fileTabsHtml(projectId, activePath) {
+  return loadFileTabs(projectId).map(tab => `
+    <div class="chat-tab file-tab${tab.path === activePath ? ' is-active' : ''}" role="tab" tabindex="0" data-file-tab="${esc(tab.path)}">
+      <i data-lucide="${fileIcon({ kind: 'file', viewer: tab.viewer })}" class="ds-icon ds-icon--xs"></i>
+      <span class="chat-tab__label">${esc(tab.name)}</span>
+      <button class="chat-tab__close" data-file-tab-close="${esc(tab.path)}" title="Fechar" aria-label="Fechar aba"><i data-lucide="x" class="ds-icon ds-icon--xs"></i></button>
+    </div>`).join('');
+}
+function safeMarkdown(source) {
+  const lines = String(source || '').split(/\r?\n/);
+  let inCode = false;
+  const html = [];
+  const inline = value => esc(value)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  for (const line of lines) {
+    if (/^```/.test(line)) {
+      html.push(inCode ? '</code></pre>' : '<pre><code>');
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) { html.push(esc(line) + '\n'); continue; }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) { const level = heading[1].length; html.push(`<h${level}>${inline(heading[2])}</h${level}>`); continue; }
+    if (/^>\s?/.test(line)) { html.push(`<blockquote>${inline(line.replace(/^>\s?/, ''))}</blockquote>`); continue; }
+    if (/^[-*]\s+/.test(line)) { html.push(`<div class="md-list-item"><span>•</span><p>${inline(line.replace(/^[-*]\s+/, ''))}</p></div>`); continue; }
+    if (!line.trim()) { html.push('<br>'); continue; }
+    html.push(`<p>${inline(line)}</p>`);
+  }
+  if (inCode) html.push('</code></pre>');
+  return html.join('');
+}
+function parseDelimited(source, delimiter) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  const text = String(source || '');
+  for (let index = 0; index <= text.length && rows.length < 500; index++) {
+    const char = text[index] ?? '\n';
+    if (quoted) {
+      if (char === '"' && text[index + 1] === '"') { field += '"'; index++; }
+      else if (char === '"') quoted = false;
+      else field += char;
+    } else if (char === '"') quoted = true;
+    else if (char === delimiter) { row.push(field); field = ''; }
+    else if (char === '\n') { row.push(field.replace(/\r$/, '')); rows.push(row); row = []; field = ''; }
+    else field += char;
+  }
+  return rows;
+}
+function csvPreview(doc) {
+  const rows = parseDelimited(doc.content, doc.name.toLowerCase().endsWith('.tsv') ? '\t' : ',');
+  if (!rows.length) return '<div class="file-empty">Tabela vazia.</div>';
+  const head = rows[0].slice(0, 50).map(cell => `<th>${esc(cell)}</th>`).join('');
+  const body = rows.slice(1).map(row => `<tr>${row.slice(0, 50).map(cell => `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
+  return `<div class="file-table-wrap"><table class="file-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function codePreview(content) {
+  return `<div class="file-code">${String(content || '').split(/\r?\n/).map((line, index) => `<div class="file-code__line"><span>${index + 1}</span><code>${esc(line) || ' '}</code></div>`).join('')}</div>`;
+}
+function sandboxHtml(source) {
+  const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; media-src data:">`;
+  return '<!doctype html><html><head>' + policy + '</head><body>' + String(source || '') + '</body></html>';
+}
+function fileViewerHtml(doc) {
+  if (!doc) return `<div class="file-empty"><i data-lucide="mouse-pointer-2" class="ds-icon ds-icon--lg"></i><h3>Selecione um arquivo</h3><p>Abra um item da árvore para visualizar seu conteúdo.</p></div>`;
+  if (doc.error) return `<div class="file-empty file-empty--error"><i data-lucide="shield-alert" class="ds-icon ds-icon--lg"></i><h3>Não foi possível abrir</h3><p>${esc(doc.error)}</p></div>`;
+  if (doc.viewer === 'markdown') return `<article class="file-markdown">${safeMarkdown(doc.content)}</article>`;
+  if (doc.viewer === 'json') {
+    let content = doc.content;
+    try { content = JSON.stringify(JSON.parse(doc.content), null, 2); } catch { /* mostra fonte invalida */ }
+    return codePreview(content);
+  }
+  if (doc.viewer === 'csv') return csvPreview(doc);
+  if (doc.viewer === 'html') return `<iframe class="file-html-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(sandboxHtml(doc.content))}" title="Preview HTML isolado"></iframe>`;
+  if (doc.viewer === 'image') return `<div class="file-media"><img src="${esc(doc.rawUrl)}" alt="Preview de ${esc(doc.name)}"></div>`;
+  if (doc.viewer === 'pdf') return `<iframe class="file-pdf-frame" src="${esc(doc.rawUrl)}" title="PDF ${esc(doc.name)}"></iframe>`;
+  return codePreview(doc.content);
+}
+function diffPreviewHtml(data) {
+  if (!data?.available) return `<div class="file-empty"><i data-lucide="git-compare" class="ds-icon ds-icon--lg"></i><h3>Diff indisponível</h3><p>${esc(data?.reason || 'Sem comparação disponível.')}</p></div>`;
+  if (!data.diff) return `<div class="file-empty"><i data-lucide="badge-check" class="ds-icon ds-icon--lg"></i><h3>Sem alterações</h3><p>O arquivo coincide com o HEAD do repositório.</p></div>`;
+  return `<div class="file-diff">${String(data.diff).split(/\r?\n/).map(line => {
+    const type = line.startsWith('+') && !line.startsWith('+++') ? 'add' : line.startsWith('-') && !line.startsWith('---') ? 'remove' : line.startsWith('@@') ? 'hunk' : '';
+    return `<div class="file-diff__line ${type ? 'is-' + type : ''}">${esc(line) || ' '}</div>`;
+  }).join('')}</div>`;
+}
+function filesListHtml(entries) {
+  if (!entries.length) return `<div class="file-empty file-empty--compact"><p>Esta pasta está vazia.</p></div>`;
+  return entries.map(entry => `
+    <button class="file-tree-row" data-${entry.kind === 'directory' ? 'file-dir' : 'file-open'}="${esc(entry.path)}" title="${esc(entry.path)}">
+      <i data-lucide="${fileIcon(entry)}" class="ds-icon ds-icon--sm"></i>
+      <span>${esc(entry.name)}</span>
+      <small>${entry.kind === 'directory' ? '' : fmtBytes(entry.size)}</small>
+    </button>`).join('');
+}
+function searchResultsHtml(search) {
+  if (!search) return '';
+  if (search.error) return `<div class="file-empty file-empty--error file-empty--compact"><p>${esc(search.error)}</p></div>`;
+  if (!search.results.length) return `<div class="file-empty file-empty--compact"><p>Nenhum resultado.</p></div>`;
+  return search.results.map(item => `
+    <button class="file-search-result" data-file-open="${esc(item.path)}">
+      <b>${esc(item.name)} <span>L${item.line}</span></b>
+      <small>${esc(item.path)}</small>
+      <p>${esc(item.preview)}</p>
+    </button>`).join('') + (search.truncated ? '<p class="ds-caption ds-text-muted file-search-limit">Resultados limitados por segurança.</p>' : '');
+}
+
+async function renderFiles(requestedFile = null) {
+  const view = $('#view-files');
+  if (!activeProjectId) {
+    await loadProjects();
+    activeProjectId = projectsCache.find(project => project.status === 'active')?.id || projectsCache[0]?.id || null;
+  }
+  if (!activeProjectId) {
+    view.innerHTML = `<div class="ds-empty-state"><i data-lucide="folder-x" class="ds-icon ds-icon--lg"></i><h3>Nenhum projeto</h3><p>Crie um projeto para navegar pelos arquivos.</p></div>`;
+    refreshIcons();
+    return;
+  }
+  if (fileBrowser.projectId !== activeProjectId) fileBrowser = { projectId: activeProjectId, directory: '', document: null, search: null };
+  if (requestedFile) fileBrowser.directory = fileParent(requestedFile);
+  view.innerHTML = `<div class="file-loading"><span class="ds-spinner"></span> Carregando arquivos...</div>`;
+
+  const listing = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/files?path=${encodeURIComponent(fileBrowser.directory)}`);
+  if (requestedFile) {
+    fileBrowser.document = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/file?path=${encodeURIComponent(requestedFile)}`);
+    if (!fileBrowser.document.error) rememberFileTab(activeProjectId, fileBrowser.document);
+  } else {
+    fileBrowser.document = null;
+  }
+  const project = projectsCache.find(item => item.id === activeProjectId);
+  const entries = listing.entries || [];
+  const doc = fileBrowser.document;
+  view.innerHTML = `
+    <div class="files-header">
+      <div><p class="ds-eyebrow">Workspace</p><h2 class="ds-heading-2xl">Arquivos de ${esc(project?.name || 'projeto')}</h2></div>
+      <div class="files-security"><i data-lucide="shield-check" class="ds-icon ds-icon--sm"></i><span>Somente leitura · isolado por projeto</span></div>
+    </div>
+    <div class="files-shell">
+      <aside class="files-explorer">
+        <form class="file-search" id="file-search-form">
+          <i data-lucide="search" class="ds-icon ds-icon--xs"></i>
+          <input id="file-search-input" aria-label="Buscar nos arquivos" placeholder="Buscar conteúdo..." value="${esc(fileBrowser.search?.query || '')}">
+          <button type="submit" title="Buscar"><i data-lucide="arrow-right" class="ds-icon ds-icon--xs"></i></button>
+          ${fileBrowser.search ? '<button type="button" id="file-search-clear" title="Limpar busca"><i data-lucide="x" class="ds-icon ds-icon--xs"></i></button>' : ''}
+        </form>
+        <div class="file-explorer-title">
+          <b>${fileBrowser.search ? 'Resultados' : 'Explorador'}</b>
+          ${fileBrowser.directory && !fileBrowser.search ? `<button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" data-file-dir="${esc(fileParent(fileBrowser.directory))}" title="Subir"><i data-lucide="corner-left-up" class="ds-icon ds-icon--xs"></i></button>` : ''}
+        </div>
+        <div class="file-tree">${fileBrowser.search ? searchResultsHtml(fileBrowser.search) : (listing.error ? `<div class="file-empty file-empty--error"><p>${esc(listing.error)}</p></div>` : filesListHtml(entries))}</div>
+      </aside>
+      <section class="files-workbench">
+        <div class="file-tabs chat-tabs">${fileTabsHtml(activeProjectId, doc?.path)}</div>
+        <div class="file-toolbar">
+          <div class="file-breadcrumbs">${fileBreadcrumbs(fileBrowser.directory)}</div>
+          ${doc && !doc.error ? `<div class="file-meta"><span class="ds-badge ds-badge--info">${esc(doc.viewer)}</span><span>${fmtBytes(doc.size)}</span><button class="ds-btn ds-btn--ghost ds-btn--sm" id="file-diff"><i data-lucide="git-compare" class="ds-icon ds-icon--xs"></i> Diff</button></div>` : ''}
+        </div>
+        <div class="file-viewer" id="file-viewer">${fileViewerHtml(doc)}</div>
+      </section>
+    </div>`;
+
+  view.querySelectorAll('[data-file-dir]').forEach(button => button.addEventListener('click', () => {
+    fileBrowser.directory = button.dataset.fileDir || '';
+    fileBrowser.document = null;
+    fileBrowser.search = null;
+    if (location.hash !== '#/files') location.hash = '#/files'; else void renderFiles(null);
+  }));
+  view.querySelectorAll('[data-file-open],[data-file-tab]').forEach(button => button.addEventListener('click', () => openProjectFile(button.dataset.fileOpen || button.dataset.fileTab)));
+  view.querySelectorAll('[data-file-tab-close]').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation(); closeFileTab(activeProjectId, button.dataset.fileTabClose);
+  }));
+  $('#file-search-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const query = $('#file-search-input').value.trim();
+    if (query.length < 2) return;
+    fileBrowser.search = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/search?q=${encodeURIComponent(query)}`);
+    await renderFiles(doc?.path || null);
+  });
+  $('#file-search-clear')?.addEventListener('click', async () => { fileBrowser.search = null; await renderFiles(doc?.path || null); });
+  $('#file-diff')?.addEventListener('click', async () => {
+    const button = $('#file-diff');
+    button.disabled = true;
+    const data = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/diff?path=${encodeURIComponent(doc.path)}`);
+    $('#file-viewer').innerHTML = diffPreviewHtml(data);
+    button.disabled = false;
+    refreshIcons();
+  });
+  refreshIcons();
+}
+
 
 // ---------- Estado global / topbar ----------
 
@@ -1797,7 +2056,15 @@ function initProjectControls() {
   $('#new-project-top')?.addEventListener('click', openCreateProjectModal);
   const sel = $('#project-switcher');
   sel?.addEventListener('change', () => {
-    if (sel.value) { setActiveProject(sel.value); location.hash = '#/project/' + sel.value; }
+    if (sel.value) {
+      setActiveProject(sel.value);
+      if (location.hash.startsWith('#/files')) {
+        if (location.hash === '#/files') void renderFiles(null);
+        else location.hash = '#/files';
+      } else {
+        location.hash = '#/project/' + sel.value;
+      }
+    }
   });
 }
 

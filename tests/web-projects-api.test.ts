@@ -225,3 +225,41 @@ test('archive marca o projeto como archived e PATCH status restaura', async () =
   assert.equal(restore.status, 200);
   assert.equal(restore.json.project.status, 'active');
 });
+
+test('API de arquivos lista, le, busca e serve imagem com isolamento', async () => {
+  const project = svc.createProject({ name: 'Files API' });
+  const root = svc.resolveProjectRoot(project);
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'app.ts'), 'const marcadorHttp = true;');
+  fs.writeFileSync(path.join(root, 'foto.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  fs.writeFileSync(path.join(root, '.env'), 'TOKEN=privado');
+
+  const list = await api('GET', `/api/projects/${project.id}/files?path=src`);
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.json.entries.map((entry: { name: string }) => entry.name), ['app.ts']);
+
+  const read = await api('GET', `/api/projects/${project.id}/file?path=${encodeURIComponent('src/app.ts')}`);
+  assert.equal(read.status, 200);
+  assert.equal(read.json.viewer, 'code');
+  assert.match(read.json.content, /marcadorHttp/);
+
+  const search = await api('GET', `/api/projects/${project.id}/search?q=marcadorHttp`);
+  assert.equal(search.status, 200);
+  assert.equal(search.json.results[0].path, 'src/app.ts');
+
+  const traversal = await api('GET', `/api/projects/${project.id}/file?path=${encodeURIComponent('../config.json')}`);
+  assert.equal(traversal.status, 403);
+  const secret = await api('GET', `/api/projects/${project.id}/file?path=.env`);
+  assert.equal(secret.status, 403);
+
+  const raw = await fetch(base + `/api/projects/${project.id}/file/raw?path=foto.png`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(raw.status, 200);
+  assert.equal(raw.headers.get('content-type'), 'image/png');
+  assert.equal(raw.headers.get('x-frame-options'), 'SAMEORIGIN');
+  await raw.body?.cancel();
+
+  const rawText = await api('GET', `/api/projects/${project.id}/file/raw?path=${encodeURIComponent('src/app.ts')}`);
+  assert.equal(rawText.status, 415);
+});
