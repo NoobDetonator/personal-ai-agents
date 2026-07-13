@@ -3,6 +3,7 @@ const WORKER_BASE_TOOLS = new Set([
   'webSearch', 'readWebPage',
   'listSkills', 'useSkill',
   'readMemory', 'saveMemory', 'readSoul', 'appendDailyNote', 'saveDeepMemory',
+  'searchVaultMemory', 'recordMemoryOutcome',
   'searchConversations', 'sendMessage', 'checkMessages',
   'getCurrentTime', 'getSystemInfo',
 ]);

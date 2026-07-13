@@ -64,3 +64,5 @@ data/, workspace/            # Estado local gerado em uso (ignorados)
 ```
 
 Consulte a [documentação](docs/) para arquitetura, configuração, agentes, memória, skills e estado local.
+
+Veja tambem o [Aria Vault](docs/aria-vault.md), com memoria pesquisavel, proveniencia e grafo de conhecimento por projeto.

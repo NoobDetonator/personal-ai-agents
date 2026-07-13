@@ -15,6 +15,7 @@ import { appendToUserProfile, PROFILE_SECTIONS } from '../agents/user-profile.js
 import { getConfig, updateAgentInConfig, updateConfig } from '../config/loader.js';
 import { validateSoulText } from '../agents/prompt-composer.js';
 import { askConfirmation } from '../chat/confirm.js';
+import { recordMemoryFeedback, searchProjectVault } from '../memory/vault-service.js';
 
 export function createMemoryTools(agentId: string) {
   const readMemoryTool = tool({
@@ -136,10 +137,25 @@ export function createMemoryTools(agentId: string) {
       slug: z.string().describe('Identificador kebab-case (ex: "projeto-analyzai-contexto")'),
       description: z.string().describe('Uma frase dizendo o que contem e quando e util (usada para decidir a recuperacao)'),
       content: z.string().describe('O conteudo completo da memoria em Markdown'),
+      noteType: z.enum(['memory', 'decision', 'preference', 'lesson', 'project', 'procedure', 'reference']).optional()
+        .describe('Tipo semantico da nota'),
+      status: z.enum(['active', 'tentative']).optional()
+        .describe('Use tentative quando o conteudo ainda nao foi confirmado'),
+      confidence: z.number().min(0).max(1).optional(),
+      sourceType: z.enum(['agent', 'observation', 'tool_result', 'imported']).optional()
+        .describe('Origem observada pelo agente; a proveniencia user e reservada a entradas humanas'),
+      tags: z.array(z.string()).max(12).optional(),
+      aliases: z.array(z.string()).max(8).optional(),
+      links: z.array(z.string()).max(20).optional()
+        .describe('Titulos de outras notas relacionadas; geram wikilinks no grafo'),
+      implementedBy: z.array(z.string()).max(20).optional()
+        .describe('Caminhos relativos de arquivos que implementam esta memoria ou decisao'),
     }),
-    execute: async ({ slug, description, content }) => {
+    execute: async ({ slug, description, content, noteType, status, confidence, sourceType, tags, aliases, links, implementedBy }) => {
       try {
-        const saved = saveScopedDeepMemory(agentId, slug, description, content);
+        const saved = saveScopedDeepMemory(agentId, slug, description, content, {
+          noteType, status, confidence, sourceType, tags, aliases, links, implementedBy,
+        });
         return { success: true, slug: saved };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'Erro ao salvar memoria' };
@@ -158,6 +174,55 @@ export function createMemoryTools(agentId: string) {
     },
   });
 
+  const searchVaultMemoryTool = tool({
+    description:
+      'Buscar primeiro no Aria Vault por memorias e decisoes relevantes do projeto. Retorna somente trechos e metadados, com origem e confianca.',
+    inputSchema: z.object({
+      query: z.string().default('').describe('Palavras ou pergunta de busca'),
+      status: z.enum(['active', 'tentative', 'contested', 'superseded', 'stale', 'needs_review']).optional(),
+      noteType: z.string().optional(),
+      limit: z.number().int().min(1).max(20).default(8),
+    }),
+    execute: async ({ query, status, noteType, limit }) => {
+      try {
+        const projectId = getProjectContext()?.projectId ?? 'legacy';
+        const role = getConfig().agents[agentId]?.role ?? 'worker';
+        const results = searchProjectVault(projectId, query, {
+          status,
+          type: noteType,
+          limit,
+          agentId: role === 'worker' ? agentId : undefined,
+        });
+        return { results, count: results.length, authority: 'data-only' };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'Falha ao buscar no Vault' };
+      }
+    },
+  });
+
+  const recordMemoryOutcomeTool = tool({
+    description:
+      'Registrar se uma memoria ou estrategia recuperada foi util, levou a um beco sem saida ou precisou de correcao. Nao promove fatos automaticamente.',
+    inputSchema: z.object({
+      question: z.string().describe('Pergunta, tarefa ou hipotese avaliada'),
+      outcome: z.enum(['useful', 'dead_end', 'corrected']),
+      memoryId: z.string().optional().describe('ID do documento retornado por searchVaultMemory'),
+      answer: z.string().optional(),
+      notes: z.string().optional(),
+    }),
+    execute: async ({ question, outcome, memoryId, answer, notes }) => {
+      try {
+        const projectId = getProjectContext()?.projectId ?? 'legacy';
+        const id = recordMemoryFeedback({
+          projectId, memoryId, agentId, question, outcome, answer, notes,
+        });
+        return { success: true, id };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'Falha ao registrar resultado' };
+      }
+    },
+  });
+
   return {
     readMemory: readMemoryTool,
     saveMemory: saveMemoryTool,
@@ -167,6 +232,8 @@ export function createMemoryTools(agentId: string) {
     readDailyNote: readDailyNoteTool,
     saveDeepMemory: saveDeepMemoryTool,
     readDeepMemory: readDeepMemoryTool,
+    searchVaultMemory: searchVaultMemoryTool,
+    recordMemoryOutcome: recordMemoryOutcomeTool,
     updateUserProfile: updateUserProfileTool,
     finishOnboarding: finishOnboardingTool,
   };

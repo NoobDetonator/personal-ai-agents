@@ -1,4 +1,4 @@
-const CACHE = 'paa-shell-20260712-1';
+const CACHE = 'paa-shell-20260713-vault-1';
 const SHELL = [
   '/offline.html', '/tokens.css', '/foundations.css', '/components.css', '/motion.css',
   '/ai-icons.css', '/agent-icons.css', '/style.css', '/login.css', '/app-icon.svg'

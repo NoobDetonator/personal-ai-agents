@@ -265,7 +265,166 @@ function runProjectMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_agent_runtime_project ON agent_runtime_events(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_agent_runtime_agent ON agent_runtime_events(agent_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_agent_runtime_type ON agent_runtime_events(type, created_at);
+    CREATE TABLE IF NOT EXISTS vault_documents (
+      id             TEXT PRIMARY KEY,
+      project_id     TEXT NOT NULL,
+      agent_id       TEXT NOT NULL,
+      kind           TEXT NOT NULL,
+      name           TEXT NOT NULL,
+      title          TEXT NOT NULL,
+      description    TEXT,
+      note_type      TEXT NOT NULL DEFAULT 'memory',
+      status         TEXT NOT NULL DEFAULT 'active',
+      confidence     REAL NOT NULL DEFAULT 1,
+      source_type    TEXT NOT NULL DEFAULT 'agent_memory',
+      source_ref     TEXT NOT NULL,
+      tags_json      TEXT NOT NULL DEFAULT '[]',
+      aliases_json   TEXT NOT NULL DEFAULT '[]',
+      links_json     TEXT NOT NULL DEFAULT '[]',
+      content        TEXT NOT NULL,
+      content_hash   TEXT NOT NULL,
+      file_mtime_ms  INTEGER NOT NULL,
+      reviewed_at    TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(project_id, source_ref)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vault_documents_project ON vault_documents(project_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_vault_documents_status ON vault_documents(project_id, status);
+    CREATE INDEX IF NOT EXISTS idx_vault_documents_agent ON vault_documents(project_id, agent_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS vault_documents_fts USING fts5(
+      title, description, content, tags_json,
+      content='vault_documents', content_rowid='rowid'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS vault_documents_fts_ai AFTER INSERT ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+      VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS vault_documents_fts_ad AFTER DELETE ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+      VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS vault_documents_fts_au AFTER UPDATE ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+      VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+      INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+      VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+    END;
+
+    CREATE TABLE IF NOT EXISTS knowledge_nodes (
+      id            TEXT PRIMARY KEY,
+      project_id    TEXT NOT NULL,
+      layer         TEXT NOT NULL,
+      kind          TEXT NOT NULL,
+      label         TEXT NOT NULL,
+      source_ref    TEXT,
+      status        TEXT NOT NULL DEFAULT 'active',
+      confidence    REAL NOT NULL DEFAULT 1,
+      content_hash  TEXT,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_project ON knowledge_nodes(project_id, layer);
+
+    CREATE TABLE IF NOT EXISTS knowledge_edges (
+      id            TEXT PRIMARY KEY,
+      project_id    TEXT NOT NULL,
+      layer         TEXT NOT NULL,
+      source_id     TEXT NOT NULL,
+      target_id     TEXT NOT NULL,
+      relation      TEXT NOT NULL,
+      origin        TEXT NOT NULL DEFAULT 'extracted',
+      confidence    REAL NOT NULL DEFAULT 1,
+      evidence      TEXT,
+      source_hash   TEXT,
+      status        TEXT NOT NULL DEFAULT 'active',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(project_id, layer, source_id, target_id, relation)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_knowledge_edges_project ON knowledge_edges(project_id, layer);
+
+    CREATE TABLE IF NOT EXISTS memory_feedback (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      memory_id  TEXT,
+      agent_id   TEXT,
+      question   TEXT NOT NULL,
+      answer     TEXT,
+      outcome    TEXT NOT NULL,
+      notes      TEXT,
+      source_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memory_feedback_project ON memory_feedback(project_id, created_at);
   `);
+  const vaultFtsColumns = db.prepare("PRAGMA table_info('vault_documents_fts')")
+    .all() as Array<{ name: string }>;
+  if (!vaultFtsColumns.some(column => column.name === 'tags_json')) {
+    db.exec(`
+      DROP TRIGGER IF EXISTS vault_documents_fts_ai;
+      DROP TRIGGER IF EXISTS vault_documents_fts_ad;
+      DROP TRIGGER IF EXISTS vault_documents_fts_au;
+      DROP TABLE IF EXISTS vault_documents_fts;
+      CREATE VIRTUAL TABLE vault_documents_fts USING fts5(
+        title, description, content, tags_json,
+        content='vault_documents', content_rowid='rowid'
+      );
+      CREATE TRIGGER vault_documents_fts_ai AFTER INSERT ON vault_documents BEGIN
+        INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+        VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+      END;
+      CREATE TRIGGER vault_documents_fts_ad AFTER DELETE ON vault_documents BEGIN
+        INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+        VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+      END;
+      CREATE TRIGGER vault_documents_fts_au AFTER UPDATE ON vault_documents BEGIN
+        INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+        VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+        INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+        VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+      END;
+    `);
+  }
+
+  // Triggers sao derivados e baratos; recria-los evita conservar uma versao
+  // intermediaria com o nome antigo da coluna de tags.
+  db.exec(`
+    DROP TRIGGER IF EXISTS vault_documents_fts_ai;
+    DROP TRIGGER IF EXISTS vault_documents_fts_ad;
+    DROP TRIGGER IF EXISTS vault_documents_fts_au;
+    CREATE TRIGGER vault_documents_fts_ai AFTER INSERT ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+      VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+    END;
+    CREATE TRIGGER vault_documents_fts_ad AFTER DELETE ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+      VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+    END;
+    CREATE TRIGGER vault_documents_fts_au AFTER UPDATE ON vault_documents BEGIN
+      INSERT INTO vault_documents_fts(vault_documents_fts, rowid, title, description, content, tags_json)
+      VALUES ('delete', old.rowid, old.title, old.description, old.content, old.tags_json);
+      INSERT INTO vault_documents_fts(rowid, title, description, content, tags_json)
+      VALUES (new.rowid, new.title, new.description, new.content, new.tags_json);
+    END;
+  `);
+
+  // FTS pode ter sido criada depois de documentos existentes em uma versao intermediaria.
+  const vaultCounts = db.prepare(
+    'SELECT (SELECT COUNT(*) FROM vault_documents) AS d, (SELECT COUNT(*) FROM vault_documents_fts) AS f',
+  ).get() as { d: number; f: number };
+  if (vaultCounts.f < vaultCounts.d) {
+    db.exec(`INSERT INTO vault_documents_fts(vault_documents_fts) VALUES ('rebuild')`);
+  }
+  addColumnIfMissing(db, 'memory_feedback', 'source_hash', 'source_hash TEXT');
 
   // Colunas aditivas nas tabelas existentes (guardadas por pragma).
   addColumnIfMissing(db, 'conversations', 'project_id', 'project_id TEXT');

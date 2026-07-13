@@ -84,6 +84,8 @@ export function buildToolSet(
     readDailyNote: memoryTools.readDailyNote,
     saveDeepMemory: memoryTools.saveDeepMemory,
     readDeepMemory: memoryTools.readDeepMemory,
+    searchVaultMemory: memoryTools.searchVaultMemory,
+    recordMemoryOutcome: memoryTools.recordMemoryOutcome,
     updateUserProfile: memoryTools.updateUserProfile,
     finishOnboarding: memoryTools.finishOnboarding,
     searchConversations: searchConversationsTool,

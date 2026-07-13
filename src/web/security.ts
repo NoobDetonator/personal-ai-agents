@@ -180,7 +180,7 @@ export class WebSecurity {
       || pathname.startsWith('/api/agents/')) return 'chat';
 
     if (/\/api\/projects\/[^/]+\/(files|file|search|diff)(?:\/|$)/.test(pathname)) return 'files';
-    if (/\/api\/projects\/[^/]+\/(memories|memory|audit)(?:\/|$)/.test(pathname)) return 'memory';
+    if (/\/api\/projects\/[^/]+\/(memories|memory|audit|vault)(?:\/|$)/.test(pathname)) return 'memory';
     return null;
   }
 

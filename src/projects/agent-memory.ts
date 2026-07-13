@@ -7,10 +7,11 @@ import {
   readDailyNote,
   readDeepMemoryFile,
   readMemory,
-  saveDeepMemoryFile,
 } from '../agents/personality.js';
 import { getProjectContext } from './context.js';
 import { getProjectSettings } from './service.js';
+import { buildVaultMarkdown, type BuildVaultNoteInput } from '../memory/metadata.js';
+import { synchronizeProjectVault } from '../memory/vault-service.js';
 
 function memoryDisabled(): boolean {
   const ctx = getProjectContext();
@@ -85,15 +86,33 @@ export function getScopedMemoriesDir(agentId: string): string {
   return dir ? path.join(dir, 'memories') : getMemoriesDir(agentId);
 }
 
-export function saveScopedDeepMemory(agentId: string, slug: string, description: string, content: string): string {
+export function saveScopedDeepMemory(
+  agentId: string,
+  slug: string,
+  description: string,
+  content: string,
+  metadata: Partial<Omit<BuildVaultNoteInput, 'title' | 'description' | 'content'>> = {},
+): string {
   if (memoryDisabled()) throw new Error('Memoria desativada neste projeto.');
   const dir = scopedAgentDir(agentId);
-  if (!dir) return saveDeepMemoryFile(agentId, slug, description, content);
   const clean = slug.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
   if (!clean) throw new Error('Slug de memoria invalido.');
-  const memoriesDir = path.join(dir, 'memories');
+  const memoriesDir = dir ? path.join(dir, 'memories') : getMemoriesDir(agentId);
   fs.mkdirSync(memoriesDir, { recursive: true });
-  fs.writeFileSync(path.join(memoriesDir, `${clean}.md`), `---\ndescription: ${description}\n---\n\n${content.trim()}\n`, 'utf-8');
+  fs.writeFileSync(
+    path.join(memoriesDir, `${clean}.md`),
+    buildVaultMarkdown({
+      title: clean.replace(/[-_]+/g, ' '),
+      description,
+      content,
+      ...metadata,
+    }),
+    'utf-8',
+  );
+  const projectId = getProjectContext()?.projectId;
+  if (projectId) {
+    try { synchronizeProjectVault(projectId); } catch { /* indice derivado nunca impede o salvamento canonico */ }
+  }
   return clean;
 }
 

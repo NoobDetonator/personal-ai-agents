@@ -45,7 +45,7 @@ const DOMAIN_TOOLS: Array<{ domain: string; pattern: RegExp; tools: string[] }> 
   {
     domain: 'memory',
     pattern: /\b(memoria|memorize|lembre|nota diaria|notas profundas)\b/i,
-    tools: ['readMemory', 'saveMemory', 'readDaily', 'appendDailyNote', 'readDeepMemory', 'saveDeepMemory'],
+    tools: ['searchVaultMemory', 'readMemory', 'saveMemory', 'readDailyNote', 'appendDailyNote', 'readDeepMemory', 'saveDeepMemory', 'recordMemoryOutcome'],
   },
   {
     domain: 'schedules',

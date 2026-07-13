@@ -67,6 +67,14 @@ import { listProjectTemplates } from '../projects/templates.js';
 import { getRun, listRunEvents, getLatestRunForConversation, isTerminalStatus, type RunStatus } from '../db/run-helpers.js';
 import { forkConversation } from '../db/conversation-helpers.js';
 import {
+  getProjectKnowledgeGraph,
+  getVaultOverview,
+  rebuildProjectKnowledge,
+  recordMemoryFeedback,
+  reflectProjectMemory,
+  searchProjectVault,
+} from '../memory/vault-service.js';
+import {
   createProjectBackup,
   listProjectBackups,
   readProjectBackup,
@@ -835,6 +843,63 @@ export function startWebServer(): void {
       }
 
 
+      const projectVaultMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault$/i);
+      if (method === 'GET' && projectVaultMatch) {
+        return json(res, 200, searchProjectVault(projectVaultMatch[1], url.searchParams.get('q') ?? '', {
+          status: url.searchParams.get('status') || undefined,
+          type: url.searchParams.get('type') || undefined,
+          agentId: url.searchParams.get('agent') || undefined,
+          view: ['review', 'unlinked', 'feedback'].includes(url.searchParams.get('view') ?? '') ? url.searchParams.get('view') as 'review' | 'unlinked' | 'feedback' : undefined,
+          limit: Number(url.searchParams.get('limit') ?? 80),
+        }));
+      }
+
+      const projectVaultOverviewMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault\/overview$/i);
+      if (method === 'GET' && projectVaultOverviewMatch) {
+        return json(res, 200, getVaultOverview(projectVaultOverviewMatch[1]));
+      }
+
+      const projectVaultGraphMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault\/graph$/i);
+      if (method === 'GET' && projectVaultGraphMatch) {
+        const requestedLayer = url.searchParams.get('layer');
+        const layer = requestedLayer === 'memory' || requestedLayer === 'code' ? requestedLayer : 'all';
+        return json(res, 200, getProjectKnowledgeGraph(
+          projectVaultGraphMatch[1], layer, Number(url.searchParams.get('limit') ?? 800),
+        ));
+      }
+
+      const projectVaultReindexMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault\/reindex$/i);
+      if (method === 'POST' && projectVaultReindexMatch) {
+        const result = rebuildProjectKnowledge(projectVaultReindexMatch[1]);
+        auditEvent(projectVaultReindexMatch[1], 'vault.reindex', 'project', projectVaultReindexMatch[1], result);
+        return json(res, 200, result);
+      }
+
+      const projectVaultFeedbackMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault\/feedback$/i);
+      if (method === 'POST' && projectVaultFeedbackMatch) {
+        const body = await readBody(req);
+        if (!['useful', 'dead_end', 'corrected'].includes(String(body.outcome))) {
+          throw new HttpError(400, 'Resultado de memoria invalido.');
+        }
+        const id = recordMemoryFeedback({
+          projectId: projectVaultFeedbackMatch[1],
+          memoryId: typeof body.memoryId === 'string' ? body.memoryId : null,
+          agentId: typeof body.agentId === 'string' ? body.agentId : null,
+          question: String(body.question ?? ''),
+          answer: typeof body.answer === 'string' ? body.answer : undefined,
+          notes: typeof body.notes === 'string' ? body.notes : undefined,
+          outcome: body.outcome as 'useful' | 'dead_end' | 'corrected',
+        });
+        auditEvent(projectVaultFeedbackMatch[1], 'vault.feedback', 'memory', String(body.memoryId ?? ''), { outcome: body.outcome });
+        return json(res, 201, { id });
+      }
+
+      const projectVaultReflectMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/vault\/reflect$/i);
+      if (method === 'POST' && projectVaultReflectMatch) {
+        const result = reflectProjectMemory(projectVaultReflectMatch[1]);
+        auditEvent(projectVaultReflectMatch[1], 'vault.reflect', 'project', projectVaultReflectMatch[1], result.outcomes);
+        return json(res, 200, result);
+      }
       const projectMemoriesMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/memories$/i);
       if (projectMemoriesMatch) {
         const projectId = projectMemoriesMatch[1];
