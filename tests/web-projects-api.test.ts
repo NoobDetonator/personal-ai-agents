@@ -207,7 +207,7 @@ test('fork duplica a conversa e DELETE remove', async () => {
   const list = await api('GET', `/api/projects/${pid}/conversations`);
   assert.equal((list.json as Array<unknown>).length, 2);
 
-  const del = await api('DELETE', `/api/conversations/${cid}`);
+  const del = await api('DELETE', `/api/conversations/${cid}`, { confirmId: cid });
   assert.equal(del.status, 200);
   const after = await api('GET', `/api/projects/${pid}/conversations`);
   assert.equal((after.json as Array<unknown>).length, 1);
@@ -281,4 +281,46 @@ test('GET /api/analytics aceita filtro multiplo de projetos', async () => {
   const multiple = await api('GET', `/api/analytics?range=24h&project=${p1.id}&project=${p2.id}`);
   assert.deepEqual(multiple.json.scope.projects, [p1.id, p2.id]);
   assert.equal(multiple.json.kpis.tokens.current, 25);
+});
+
+test('API de dados gerencia memoria, export, settings, diagnostico e auditoria', async () => {
+  const project = svc.createProject({ name: 'Dados HTTP' });
+  const root = svc.resolveProjectRoot(project);
+  const agentDir = path.join(path.dirname(root), '.aria', 'agents', 'aria');
+  fs.mkdirSync(agentDir, { recursive: true });
+  fs.writeFileSync(path.join(agentDir, 'memory.md'), '# Memoria\n\n- dado HTTP');
+
+  const memories = await api('GET', `/api/projects/${project.id}/memories`);
+  assert.equal(memories.status, 200);
+  assert.equal(memories.json.length, 1);
+  const memoryId = memories.json[0].id;
+  const memory = await api('GET', `/api/projects/${project.id}/memory?id=${encodeURIComponent(memoryId)}`);
+  assert.match(memory.json.content, /dado HTTP/);
+
+  const wrong = await api('DELETE', `/api/projects/${project.id}/memory?id=${encodeURIComponent(memoryId)}`, { confirmId: 'errado' });
+  assert.equal(wrong.status, 400);
+
+  const settings = await api('PATCH', `/api/projects/${project.id}/settings`, {
+    shellMode: 'off', delegationTimeoutSec: 90, maxConcurrency: 3, memoryEnabled: false,
+  });
+  assert.equal(settings.status, 200);
+  assert.equal(settings.json.settings.shell_mode, 'off');
+  assert.equal(settings.json.settings.max_concurrency, 3);
+  assert.equal(settings.json.settings.memory_enabled, 0);
+
+  const exported = await api('GET', `/api/projects/${project.id}/export`);
+  assert.equal(exported.status, 200);
+  assert.equal(exported.json.format, 'personal-ai-agents-project-export');
+
+  const removed = await api('DELETE', `/api/projects/${project.id}/memory?id=${encodeURIComponent(memoryId)}`, { confirmId: memoryId });
+  assert.equal(removed.status, 200);
+  const audit = await api('GET', `/api/projects/${project.id}/audit`);
+  assert.ok(audit.json.some((event: any) => event.action === 'memory.delete'));
+  assert.ok(audit.json.some((event: any) => event.action === 'project.export'));
+  assert.ok(audit.json.some((event: any) => event.action === 'settings.update'));
+
+  const diagnostic = await api('GET', '/api/diagnostics');
+  assert.equal(diagnostic.status, 200);
+  assert.equal(diagnostic.json.status, 'healthy');
+  assert.equal(diagnostic.json.web.remoteAccess, false);
 });

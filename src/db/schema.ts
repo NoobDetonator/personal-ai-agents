@@ -235,6 +235,20 @@ function runProjectMigrations(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, sequence);
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id            TEXT PRIMARY KEY,
+      project_id    TEXT,
+      actor          TEXT NOT NULL,
+      action         TEXT NOT NULL,
+      target_type    TEXT NOT NULL,
+      target_id      TEXT,
+      metadata_json TEXT,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_events_project ON audit_events(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events(action, created_at);
   `);
 
   // Colunas aditivas nas tabelas existentes (guardadas por pragma).

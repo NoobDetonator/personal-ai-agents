@@ -206,6 +206,25 @@ export function updateProject(
   return getProject(id);
 }
 
+
+export function updateProjectSettings(
+  id: string,
+  patch: Partial<Pick<ProjectSettings, 'default_model' | 'default_provider' | 'shell_mode' | 'delegation_timeout_sec' | 'max_concurrency' | 'memory_enabled'>>,
+): ProjectSettings | null {
+  const existing = getProjectSettings(id);
+  if (!existing) return null;
+  const next = { ...existing, ...patch };
+  getDb().prepare(
+    `UPDATE project_settings SET default_model = ?, default_provider = ?, shell_mode = ?,
+       delegation_timeout_sec = ?, max_concurrency = ?, memory_enabled = ?, updated_at = datetime('now')
+     WHERE project_id = ?`,
+  ).run(
+    next.default_model, next.default_provider, next.shell_mode,
+    next.delegation_timeout_sec, next.max_concurrency, next.memory_enabled ? 1 : 0, id,
+  );
+  return getProjectSettings(id);
+}
+
 export function archiveProject(id: string): boolean {
   const info = getDb().prepare(
     `UPDATE projects SET status = 'archived', updated_at = datetime('now') WHERE id = ?`,

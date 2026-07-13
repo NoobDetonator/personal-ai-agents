@@ -10,6 +10,12 @@ import {
   saveDeepMemoryFile,
 } from '../agents/personality.js';
 import { getProjectContext } from './context.js';
+import { getProjectSettings } from './service.js';
+
+function memoryDisabled(): boolean {
+  const ctx = getProjectContext();
+  return !!ctx && getProjectSettings(ctx.projectId)?.memory_enabled === 0;
+}
 
 function scopedAgentDir(agentId: string): string | null {
   const ctx = getProjectContext();
@@ -28,11 +34,13 @@ function readText(filePath: string): string {
 }
 
 export function readScopedMemory(agentId: string): string {
+  if (memoryDisabled()) return '';
   const dir = scopedAgentDir(agentId);
   return dir ? readText(path.join(dir, 'memory.md')) : readMemory(agentId);
 }
 
 export function appendScopedMemorySection(agentId: string, section: string, content: string): void {
+  if (memoryDisabled()) throw new Error('Memoria desativada neste projeto.');
   const dir = scopedAgentDir(agentId);
   if (!dir) return appendToMemorySection(agentId, section, content);
   fs.mkdirSync(dir, { recursive: true });
@@ -53,11 +61,13 @@ export function appendScopedMemorySection(agentId: string, section: string, cont
 }
 
 export function readScopedDailyNote(agentId: string, date?: string): string {
+  if (memoryDisabled()) return '';
   const dir = scopedAgentDir(agentId);
   return dir ? readText(path.join(dir, 'daily', `${date ?? todayStamp()}.md`)) : readDailyNote(agentId, date);
 }
 
 export function appendScopedDailyNote(agentId: string, content: string): void {
+  if (memoryDisabled()) throw new Error('Memoria desativada neste projeto.');
   const dir = scopedAgentDir(agentId);
   if (!dir) return appendDailyNote(agentId, content);
   const dailyDir = path.join(dir, 'daily');
@@ -70,11 +80,13 @@ export function appendScopedDailyNote(agentId: string, content: string): void {
 }
 
 export function getScopedMemoriesDir(agentId: string): string {
+  if (memoryDisabled()) return path.join(getProjectContext()!.projectRoot, '.aria-disabled-memory', agentId);
   const dir = scopedAgentDir(agentId);
   return dir ? path.join(dir, 'memories') : getMemoriesDir(agentId);
 }
 
 export function saveScopedDeepMemory(agentId: string, slug: string, description: string, content: string): string {
+  if (memoryDisabled()) throw new Error('Memoria desativada neste projeto.');
   const dir = scopedAgentDir(agentId);
   if (!dir) return saveDeepMemoryFile(agentId, slug, description, content);
   const clean = slug.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
@@ -86,6 +98,7 @@ export function saveScopedDeepMemory(agentId: string, slug: string, description:
 }
 
 export function readScopedDeepMemory(agentId: string, slug: string): string | null {
+  if (memoryDisabled()) return null;
   const dir = scopedAgentDir(agentId);
   if (!dir) return readDeepMemoryFile(agentId, slug);
   const content = readText(path.join(dir, 'memories', `${slug}.md`));

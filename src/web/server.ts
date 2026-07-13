@@ -31,6 +31,7 @@ import {
   archiveProject,
   deleteProject,
   assignAgentToProject,
+  updateProjectSettings,
 } from '../projects/service.js';
 import {
   listProjectFiles,
@@ -41,13 +42,24 @@ import {
   ProjectFileError,
 } from '../projects/files-service.js';
 import {
+  listProjectMemories,
+  readProjectMemory,
+  deleteProjectMemory,
+  clearProjectMemories,
+  deleteProjectConversation,
+  exportProjectData,
+  listAuditEvents,
+  auditEvent,
+  ProjectDataError,
+} from '../projects/data-service.js';
+import {
   listProjectConversations,
   createProjectConversation,
   patchConversation,
 } from '../projects/conversation-service.js';
 import { startChatRun, cancelRun } from '../chat/run-service.js';
 import { getRun, listRunEvents, getLatestRunForConversation, isTerminalStatus, type RunStatus } from '../db/run-helpers.js';
-import { deleteConversation, forkConversation } from '../db/conversation-helpers.js';
+import { forkConversation } from '../db/conversation-helpers.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
@@ -453,6 +465,78 @@ async function handleDeleteProject(req: http.IncomingMessage, res: http.ServerRe
   return json(res, result.ok ? 200 : 400, result.ok ? { success: true } : { error: result.error });
 }
 
+
+async function handleProjectSettings(req: http.IncomingMessage, res: http.ServerResponse, projectId: string): Promise<void> {
+  if (!getProject(projectId)) return json(res, 404, { error: 'projeto nao encontrado' });
+  const body = await readBody(req);
+  const patch: Parameters<typeof updateProjectSettings>[1] = {};
+  if (body.defaultModel === null) {
+    patch.default_model = null;
+    patch.default_provider = null;
+  } else if (typeof body.defaultModel === 'string') {
+    const model = getAvailableModels().find(item => item.id === body.defaultModel);
+    if (!model) throw new HttpError(400, 'Modelo invalido.');
+    patch.default_model = model.id;
+    patch.default_provider = model.provider;
+  }
+  if (body.shellMode === null || body.shellMode === 'auto' || body.shellMode === 'confirm' || body.shellMode === 'off') {
+    patch.shell_mode = body.shellMode as string | null;
+  }
+  if (body.delegationTimeoutSec === null) patch.delegation_timeout_sec = null;
+  else if (typeof body.delegationTimeoutSec === 'number' && body.delegationTimeoutSec >= 10 && body.delegationTimeoutSec <= 3600) {
+    patch.delegation_timeout_sec = Math.floor(body.delegationTimeoutSec);
+  }
+  if (body.maxConcurrency === null) patch.max_concurrency = null;
+  else if (typeof body.maxConcurrency === 'number' && body.maxConcurrency >= 1 && body.maxConcurrency <= 16) {
+    patch.max_concurrency = Math.floor(body.maxConcurrency);
+  }
+  if (typeof body.memoryEnabled === 'boolean') patch.memory_enabled = body.memoryEnabled ? 1 : 0;
+  const settings = updateProjectSettings(projectId, patch);
+  auditEvent(projectId, 'settings.update', 'project', projectId, { fields: Object.keys(patch) });
+  json(res, 200, { settings });
+}
+
+async function handleDeleteConversationData(req: http.IncomingMessage, res: http.ServerResponse, conversationId: string): Promise<void> {
+  const body = await readBody(req);
+  const row = getDb().prepare(`SELECT COALESCE(project_id, 'legacy') AS projectId FROM conversations WHERE id = ?`)
+    .get(conversationId) as { projectId: string } | undefined;
+  if (!row) return json(res, 404, { error: 'conversa nao encontrada' });
+  deleteProjectConversation(row.projectId, conversationId, String(body.confirmId ?? ''));
+  json(res, 200, { success: true });
+}
+
+function downloadProjectExport(res: http.ServerResponse, projectId: string): void {
+  const project = getProject(projectId);
+  if (!project) throw new ProjectDataError(404, 'Projeto nao encontrado.');
+  const body = Buffer.from(JSON.stringify(exportProjectData(projectId), null, 2));
+  const safeName = project.slug.replace(/[^a-z0-9-]/gi, '-');
+  setSecurityHeaders(res);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Length', String(body.length));
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}-export.json"`);
+  res.writeHead(200);
+  res.end(body);
+}
+
+function apiDiagnostics(): unknown {
+  const db = getDb();
+  const quick = db.pragma('quick_check') as Array<Record<string, unknown>>;
+  const counts: Record<string, number> = {};
+  for (const table of ['projects', 'conversations', 'messages', 'runs', 'tasks', 'usage_events', 'audit_events']) {
+    counts[table] = Number((db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count);
+  }
+  return {
+    status: quick.every(row => Object.values(row).includes('ok')) ? 'healthy' : 'degraded',
+    version: '3.0.0',
+    uptimeSec: Math.floor(process.uptime()),
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    database: { quickCheck: quick, counts },
+    web: { bind: LOOPBACK_HOST, remoteAccess: false, sessionAuth: true },
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 // --- Conversations & runs ---
 
 async function handleCreateConversation(req: http.IncomingMessage, res: http.ServerResponse, projectId: string): Promise<void> {
@@ -646,6 +730,8 @@ export function startWebServer(): void {
       if (method === 'GET' && p === '/api/groups') return json(res, 200, apiGroups());
       if (method === 'GET' && p === '/api/models') return json(res, 200, getAvailableModels());
       if (method === 'GET' && p === '/api/profile') return json(res, 200, { profile: readUserProfile() });
+      if (method === 'GET' && p === '/api/diagnostics') return json(res, 200, apiDiagnostics());
+      if (method === 'GET' && p === '/api/audit') return json(res, 200, listAuditEvents(url.searchParams.get('project') ?? undefined));
 
       const agentMatch = p.match(/^\/api\/agents\/([a-z0-9_-]+)$/);
       if (method === 'GET' && agentMatch) {
@@ -688,6 +774,39 @@ export function startWebServer(): void {
         return json(res, 200, diffProjectFile(projectDiffMatch[1], url.searchParams.get('path') ?? ''));
       }
 
+
+      const projectMemoriesMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/memories$/i);
+      if (projectMemoriesMatch) {
+        const projectId = projectMemoriesMatch[1];
+        if (method === 'GET') return json(res, 200, listProjectMemories(projectId));
+        if (method === 'DELETE') {
+          const body = await readBody(req);
+          const removed = clearProjectMemories(projectId, String(body.confirmName ?? ''));
+          return json(res, 200, { success: true, removed });
+        }
+      }
+
+      const projectMemoryMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/memory$/i);
+      if (projectMemoryMatch) {
+        const projectId = projectMemoryMatch[1];
+        const memoryId = url.searchParams.get('id') ?? '';
+        if (method === 'GET') return json(res, 200, readProjectMemory(projectId, memoryId));
+        if (method === 'DELETE') {
+          const body = await readBody(req);
+          const removed = deleteProjectMemory(projectId, memoryId, String(body.confirmId ?? ''));
+          return json(res, 200, { success: true, removed });
+        }
+      }
+
+      const projectExportMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/export$/i);
+      if (method === 'GET' && projectExportMatch) return downloadProjectExport(res, projectExportMatch[1]);
+
+      const projectSettingsMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/settings$/i);
+      if (method === 'PATCH' && projectSettingsMatch) return await handleProjectSettings(req, res, projectSettingsMatch[1]);
+
+      const projectAuditMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/audit$/i);
+      if (method === 'GET' && projectAuditMatch) return json(res, 200, listAuditEvents(projectAuditMatch[1]));
+
       const projMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})$/i);
       if (projMatch) {
         const pid = projMatch[1];
@@ -718,10 +837,7 @@ export function startWebServer(): void {
       // --- Conversations (project-scoped) & runs ---
       const convScopedMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)$/);
       if (method === 'PATCH' && convScopedMatch) return await handlePatchConversation(req, res, convScopedMatch[1]);
-      if (method === 'DELETE' && convScopedMatch) {
-        const ok = deleteConversation(convScopedMatch[1]);
-        return json(res, ok ? 200 : 404, { success: ok });
-      }
+      if (method === 'DELETE' && convScopedMatch) return await handleDeleteConversationData(req, res, convScopedMatch[1]);
 
       const convForkMatch = p.match(/^\/api\/conversations\/([a-f0-9-]+)\/fork$/);
       if (method === 'POST' && convForkMatch) {
@@ -758,7 +874,7 @@ export function startWebServer(): void {
       res.setHeader('Allow', 'GET');
       return json(res, 405, { error: 'metodo nao permitido' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProjectFileError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProjectFileError || error instanceof ProjectDataError ? error.status : 500;
       json(res, status, { error: error instanceof Error ? error.message : 'erro interno' });
     }
   });

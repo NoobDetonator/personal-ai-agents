@@ -184,7 +184,7 @@ function aiBadge(provider, model) {
 
 // ---------- Navegacao ----------
 
-const views = ['projects', 'project-detail', 'chat', 'overview', 'live', 'agents', 'agent-detail', 'board', 'files', 'skills', 'settings'];
+const views = ['projects', 'project-detail', 'chat', 'overview', 'live', 'agents', 'agent-detail', 'board', 'files', 'memory', 'skills', 'settings'];
 
 function show(view) {
   for (const v of views) {
@@ -235,6 +235,7 @@ async function router() {
   if (view === 'agents') await renderAgents();
   if (view === 'board') await renderBoard();
   if (view === 'skills') await renderSkills();
+  if (view === 'memory') await renderMemory();
   if (view === 'settings') await renderSettings();
 }
 
@@ -832,7 +833,7 @@ function wireChatControls(convId, meta) {
   $('#chat-delete').addEventListener('click', () => openDeleteConversationModal(convId, meta.title || 'esta conversa'));
 }
 
-function openDeleteConversationModal(convId, title) {
+function openDeleteConversationModal(convId, title, onDeleted) {
   openModal(`
     <div class="ds-modal__header">
       <h3 class="ds-modal__title">Apagar conversa</h3>
@@ -847,9 +848,10 @@ function openDeleteConversationModal(convId, title) {
     </div>
   `);
   $('#dc-submit').addEventListener('click', async () => {
-    await api('/api/conversations/' + convId, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await api('/api/conversations/' + convId, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmId: convId }) });
     closeModal();
-    closeChatTab(convId);
+    if (typeof onDeleted === 'function') await onDeleted();
+    else closeChatTab(convId);
   });
 }
 
@@ -1842,6 +1844,134 @@ async function renderBoard() {
   refreshIcons();
 }
 
+// ---------- Memórias e dados ----------
+
+let memoryViewTab = 'memories';
+const MEMORY_KIND = { main: 'Memória principal', daily: 'Nota diária', deep: 'Memória profunda' };
+
+function memoryCardsHtml(memories) {
+  if (!memories.length) return `<div class="ds-empty-state"><i data-lucide="brain" class="ds-empty-state__icon"></i><h3 class="ds-empty-state__title">Nenhuma memória neste projeto</h3><p class="ds-empty-state__description">As memórias criadas pela Aria e pelos agentes aparecerão aqui.</p></div>`;
+  return `<div class="memory-grid">${memories.map(memory => `
+    <article class="memory-card">
+      <div class="memory-card__icon"><i data-lucide="${memory.kind === 'main' ? 'brain-circuit' : memory.kind === 'daily' ? 'calendar-days' : 'book-marked'}" class="ds-icon ds-icon--md"></i></div>
+      <div class="memory-card__content">
+        <div class="memory-card__head"><span class="ds-badge ds-badge--info">${esc(MEMORY_KIND[memory.kind] || memory.kind)}</span><span class="ds-caption">${fmtBytes(memory.size)}</span></div>
+        <h3>${esc(memory.name)}</h3>
+        <p>${esc(memory.description)}</p>
+        <small>Agente: ${esc(memory.agentId)} · ${fmtDate(memory.modifiedAt)}</small>
+        <p class="memory-card__preview">${esc(memory.preview || 'Sem conteúdo.')}</p>
+      </div>
+      <div class="memory-card__actions">
+        <button class="ds-btn ds-btn--outline ds-btn--sm" data-memory-open="${esc(memory.id)}"><i data-lucide="eye" class="ds-icon ds-icon--xs"></i> Abrir</button>
+        <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" data-memory-delete="${esc(memory.id)}" data-memory-name="${esc(memory.name)}" title="Apagar"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
+      </div>
+    </article>`).join('')}</div>`;
+}
+function dataConversationsHtml(conversations) {
+  if (!conversations.length) return `<div class="ds-empty-state"><i data-lucide="messages-square" class="ds-empty-state__icon"></i><h3 class="ds-empty-state__title">Nenhuma conversa</h3></div>`;
+  return `<div class="data-list">${conversations.map(conversation => `
+    <div class="data-list-row">
+      <span class="data-list-row__icon"><i data-lucide="${conversation.pinned ? 'pin' : 'message-square'}" class="ds-icon ds-icon--sm"></i></span>
+      <span class="data-list-row__main"><b>${esc(conversation.title || 'Conversa sem título')}</b><small>${conversation.message_count} mensagens · ${fmtDate(conversation.updated_at)}</small></span>
+      ${conversation.archived ? '<span class="ds-badge ds-badge--warning">arquivada</span>' : ''}
+      <button class="ds-btn ds-btn--outline ds-btn--sm" data-data-conversation-open="${esc(conversation.id)}" data-data-conversation-title="${esc(conversation.title || 'Conversa')}"><i data-lucide="external-link" class="ds-icon ds-icon--xs"></i> Abrir</button>
+      <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" data-data-conversation-delete="${esc(conversation.id)}" data-data-conversation-title="${esc(conversation.title || 'Conversa')}" title="Apagar"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
+    </div>`).join('')}</div>`;
+}
+function auditHtml(events) {
+  if (!events.length) return `<div class="ds-empty-state"><i data-lucide="scroll-text" class="ds-empty-state__icon"></i><h3 class="ds-empty-state__title">Nenhum evento auditado</h3></div>`;
+  const label = { 'memory.delete': 'Memória apagada', 'memory.clear': 'Memórias limpas', 'conversation.delete': 'Conversa apagada', 'project.export': 'Dados exportados', 'settings.update': 'Configurações alteradas' };
+  return `<div class="data-list">${events.map(event => `
+    <div class="data-list-row audit-row">
+      <span class="data-list-row__icon"><i data-lucide="shield-check" class="ds-icon ds-icon--sm"></i></span>
+      <span class="data-list-row__main"><b>${esc(label[event.action] || event.action)}</b><small>${esc(event.target_type)} · ${esc(event.target_id || 'projeto')}</small></span>
+      <span class="ds-caption">${fmtDate(event.created_at)}</span>
+    </div>`).join('')}</div>`;
+}
+
+async function renderMemory() {
+  if (!activeProjectId) await loadProjects();
+  const view = $('#view-memory');
+  const project = projectsCache.find(item => item.id === activeProjectId);
+  if (!project) {
+    view.innerHTML = '<div class="ds-empty-state"><h3>Selecione um projeto</h3></div>';
+    return;
+  }
+  view.innerHTML = '<div class="file-loading"><span class="ds-spinner"></span> Carregando dados...</div>';
+  const [memories, conversations, audit] = await Promise.all([
+    api(`/api/projects/${encodeURIComponent(project.id)}/memories`),
+    api(`/api/projects/${encodeURIComponent(project.id)}/conversations`),
+    api(`/api/projects/${encodeURIComponent(project.id)}/audit`),
+  ]);
+  const contents = {
+    memories: memoryCardsHtml(Array.isArray(memories) ? memories : []),
+    conversations: dataConversationsHtml(Array.isArray(conversations) ? conversations : []),
+    audit: auditHtml(Array.isArray(audit) ? audit : []),
+  };
+  view.innerHTML = `
+    <div class="data-header">
+      <div><p class="ds-eyebrow">Privacidade e controle</p><h2 class="ds-heading-2xl">Dados de ${esc(project.name)}</h2><p class="ds-body-sm ds-text-muted">Revise, exporte e remova memórias e conversas sem acessar o servidor por SSH.</p></div>
+      <div class="data-header__actions">
+        <a class="ds-btn ds-btn--outline" href="/api/projects/${encodeURIComponent(project.id)}/export" download><i data-lucide="download" class="ds-icon ds-icon--sm"></i> Exportar JSON</a>
+        <button class="ds-btn ds-btn--danger" id="memory-clear-all"><i data-lucide="eraser" class="ds-icon ds-icon--sm"></i> Limpar memórias</button>
+      </div>
+    </div>
+    <div class="data-tabs ov-seg" role="tablist">
+      <button class="ov-seg__btn${memoryViewTab === 'memories' ? ' is-active' : ''}" data-memory-tab="memories">Memórias <span>${Array.isArray(memories) ? memories.length : 0}</span></button>
+      <button class="ov-seg__btn${memoryViewTab === 'conversations' ? ' is-active' : ''}" data-memory-tab="conversations">Conversas <span>${Array.isArray(conversations) ? conversations.length : 0}</span></button>
+      <button class="ov-seg__btn${memoryViewTab === 'audit' ? ' is-active' : ''}" data-memory-tab="audit">Auditoria <span>${Array.isArray(audit) ? audit.length : 0}</span></button>
+    </div>
+    <section class="data-content">${contents[memoryViewTab]}</section>`;
+
+  view.querySelectorAll('[data-memory-tab]').forEach(button => button.addEventListener('click', () => { memoryViewTab = button.dataset.memoryTab; renderMemory(); }));
+  view.querySelectorAll('[data-memory-open]').forEach(button => button.addEventListener('click', () => openMemoryDetail(project.id, button.dataset.memoryOpen)));
+  view.querySelectorAll('[data-memory-delete]').forEach(button => button.addEventListener('click', () => openDeleteMemoryModal(project.id, button.dataset.memoryDelete, button.dataset.memoryName)));
+  view.querySelectorAll('[data-data-conversation-open]').forEach(button => button.addEventListener('click', () => openChatConversation(button.dataset.dataConversationOpen, button.dataset.dataConversationTitle)));
+  view.querySelectorAll('[data-data-conversation-delete]').forEach(button => button.addEventListener('click', () => openDeleteConversationModal(button.dataset.dataConversationDelete, button.dataset.dataConversationTitle, renderMemory)));
+  $('#memory-clear-all')?.addEventListener('click', () => openClearMemoriesModal(project));
+  refreshIcons();
+}
+
+async function openMemoryDetail(projectId, memoryId) {
+  const memory = await api(`/api/projects/${encodeURIComponent(projectId)}/memory?id=${encodeURIComponent(memoryId)}`);
+  openModal(`
+    <div class="ds-modal__header"><div><span class="ds-badge ds-badge--info">${esc(MEMORY_KIND[memory.kind] || memory.kind)}</span><h3 class="ds-modal__title memory-modal-title">${esc(memory.name)}</h3></div><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><p class="ds-caption">Agente ${esc(memory.agentId)} · ${fmtBytes(memory.size)}</p><pre class="memory-document">${esc(memory.content)}</pre></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Fechar</button><button class="ds-btn ds-btn--danger" id="memory-detail-delete"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i> Apagar</button></div>`, 'lg');
+  $('#memory-detail-delete')?.addEventListener('click', () => openDeleteMemoryModal(projectId, memoryId, memory.name));
+  refreshIcons();
+}
+
+function openDeleteMemoryModal(projectId, memoryId, name) {
+  openModal(`
+    <div class="ds-modal__header"><h3 class="ds-modal__title">Apagar memória</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><div class="data-danger-note"><i data-lucide="triangle-alert" class="ds-icon ds-icon--sm"></i><p>A memória <b>${esc(name)}</b> será removida permanentemente. Exporte o projeto antes se quiser guardar uma cópia.</p></div></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--danger" id="memory-delete-submit">Apagar definitivamente</button></div>`);
+  $('#memory-delete-submit')?.addEventListener('click', async () => {
+    const result = await api(`/api/projects/${encodeURIComponent(projectId)}/memory?id=${encodeURIComponent(memoryId)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmId: memoryId }) });
+    if (result.error) return;
+    closeModal();
+    await renderMemory();
+  });
+  refreshIcons();
+}
+
+function openClearMemoriesModal(project) {
+  openModal(`
+    <div class="ds-modal__header"><h3 class="ds-modal__title">Limpar todas as memórias</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><div class="data-danger-note"><i data-lucide="shield-alert" class="ds-icon ds-icon--sm"></i><p>Isso apaga memórias principais, notas diárias e memórias profundas de todos os agentes deste projeto. Souls e arquivos do workspace serão preservados.</p></div><label class="ds-label" for="memory-clear-confirm">Digite <b>${esc(project.name)}</b> para confirmar</label><input class="ds-input" id="memory-clear-confirm" autocomplete="off"></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--danger" id="memory-clear-submit" disabled>Limpar memórias</button></div>`);
+  const input = $('#memory-clear-confirm'), submit = $('#memory-clear-submit');
+  input.addEventListener('input', () => { submit.disabled = input.value !== project.name; });
+  submit.addEventListener('click', async () => {
+    const result = await api(`/api/projects/${encodeURIComponent(project.id)}/memories`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmName: input.value }) });
+    if (result.error) return;
+    closeModal();
+    await renderMemory();
+  });
+  refreshIcons();
+}
+
 // ---------- Skills ----------
 
 async function renderSkills() {
@@ -1873,6 +2003,9 @@ async function renderSettings() {
   await refreshState();
   const models = await api('/api/models');
   const c = state.config;
+  const projectData = activeProjectId ? await api('/api/projects/' + encodeURIComponent(activeProjectId)) : null;
+  const ps = projectData?.settings || {};
+  const diagnostics = await api('/api/diagnostics');
 
   $('#view-settings').innerHTML = `
     <h2 class="ds-heading-2xl" style="margin-bottom:16px;">Configurações</h2>
@@ -1893,7 +2026,31 @@ async function renderSettings() {
         </select>`)}
     </div>
     <div class="ds-card">
-      <div class="ds-card__header"><h3 class="ds-card__title">Comandos aguardando aprovação</h3></div>
+      ${projectData ? `
+    <div class="ds-card settings-section" style="margin-bottom:16px;">
+      <div class="ds-card__header"><div><h3 class="ds-card__title">Configurações de ${esc(projectData.project.name)}</h3><p class="ds-caption">Sobrescritas aplicadas apenas neste projeto.</p></div><span class="ds-badge ds-badge--info">projeto</span></div>
+      ${settingRow('Modelo padrão do projeto', 'Vazio herda o modelo global', `
+        <select class="ds-select" id="set-project-model" style="width:260px"><option value="">Herdar global</option>${models.map(model => `<option value="${esc(model.id)}"${model.id === ps.default_model ? ' selected' : ''}>${esc(model.name)}</option>`).join('')}</select>`)}
+      ${settingRow('Shell do projeto', 'Permissão independente para este workspace', `
+        <select class="ds-select" id="set-project-shell" style="width:180px"><option value="">Herdar global</option><option value="confirm"${ps.shell_mode === 'confirm' ? ' selected' : ''}>Confirmar</option><option value="off"${ps.shell_mode === 'off' ? ' selected' : ''}>Desligado</option><option value="auto"${ps.shell_mode === 'auto' ? ' selected' : ''}>Automático</option></select>`)}
+      ${settingRow('Timeout de delegação', 'Entre 10 e 3600 segundos', `<input type="number" class="ds-input" id="set-project-timeout" min="10" max="3600" value="${ps.delegation_timeout_sec ?? 120}" style="width:110px">`)}
+      ${settingRow('Concorrência máxima', 'De 1 a 16 agentes simultâneos', `<input type="number" class="ds-input" id="set-project-concurrency" min="1" max="16" value="${ps.max_concurrency ?? 3}" style="width:90px">`)}
+      ${settingRow('Memória do projeto', 'Permite que agentes leiam e gravem memórias neste escopo', `<label class="ds-switch"><input type="checkbox" class="ds-switch__input" id="set-project-memory" ${ps.memory_enabled !== 0 ? 'checked' : ''}><span class="ds-switch__track"><span class="ds-switch__thumb"></span></span></label>`)}
+    </div>` : ''}
+    <div class="ds-card settings-section" style="margin-bottom:16px;">
+      <div class="ds-card__header"><div><h3 class="ds-card__title">Diagnóstico do sistema</h3><p class="ds-caption">Estado do backend sem expor caminhos ou segredos.</p></div><span class="ds-badge ds-badge--${diagnostics.status === 'healthy' ? 'success' : 'danger'}">${esc(diagnostics.status)}</span></div>
+      <div class="diagnostic-grid">
+        <div><span>Versão</span><b>${esc(diagnostics.version)}</b></div>
+        <div><span>Node.js</span><b>${esc(diagnostics.runtime?.node)}</b></div>
+        <div><span>Banco</span><b>${diagnostics.database?.quickCheck?.[0]?.quick_check === 'ok' ? 'íntegro' : 'revisar'}</b></div>
+        <div><span>Projetos</span><b>${diagnostics.database?.counts?.projects ?? 0}</b></div>
+        <div><span>Conversas</span><b>${diagnostics.database?.counts?.conversations ?? 0}</b></div>
+        <div><span>Runs</span><b>${diagnostics.database?.counts?.runs ?? 0}</b></div>
+        <div><span>Acesso remoto</span><b>${diagnostics.web?.remoteAccess ? 'ativo' : 'desativado'}</b></div>
+        <div><span>Sessão protegida</span><b>${diagnostics.web?.sessionAuth ? 'sim' : 'não'}</b></div>
+      </div>
+    </div>
+    <div class="ds-card__header"><h3 class="ds-card__title">Comandos aguardando aprovação</h3></div>
       <div id="settings-pending">${pendingHtml(state.pendingConfirmations)}</div>
     </div>
   `;
@@ -1904,6 +2061,12 @@ async function renderSettings() {
   $('#set-tools').onchange = e => saveSettings({ showToolCalls: e.target.checked });
   $('#set-nudge').onchange = e => saveSettings({ nudgeEvery: Number(e.target.value) });
   $('#set-model').onchange = e => saveSettings({ model: e.target.value });
+  $('#set-project-model')?.addEventListener('change', event => saveProjectSettings({ defaultModel: event.target.value || null }));
+  $('#set-project-shell')?.addEventListener('change', event => saveProjectSettings({ shellMode: event.target.value || null }));
+  $('#set-project-timeout')?.addEventListener('change', event => saveProjectSettings({ delegationTimeoutSec: Number(event.target.value) }));
+  $('#set-project-concurrency')?.addEventListener('change', event => saveProjectSettings({ maxConcurrency: Number(event.target.value) }));
+  $('#set-project-memory')?.addEventListener('change', event => saveProjectSettings({ memoryEnabled: event.target.checked }));
+
   refreshIcons();
 }
 
@@ -1914,6 +2077,17 @@ async function saveSettings(patch) {
     body: JSON.stringify(patch),
   });
   await refreshState();
+}
+
+
+async function saveProjectSettings(patch) {
+  if (!activeProjectId) return;
+  const result = await api('/api/projects/' + encodeURIComponent(activeProjectId) + '/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!result.error) await renderSettings();
 }
 
 // ---------- Confirmacoes pendentes ----------
@@ -2149,9 +2323,14 @@ function initProjectControls() {
   sel?.addEventListener('change', () => {
     if (sel.value) {
       setActiveProject(sel.value);
-      if (location.hash.startsWith('#/files')) {
-        if (location.hash === '#/files') void renderFiles(null);
-        else location.hash = '#/files';
+      const scopedRoute = location.hash.startsWith('#/files') ? '#/files'
+        : location.hash.startsWith('#/memory') ? '#/memory'
+          : null;
+      if (scopedRoute) {
+        if (location.hash === scopedRoute) {
+          if (scopedRoute === '#/files') void renderFiles(null);
+          else void renderMemory();
+        } else location.hash = scopedRoute;
       } else {
         location.hash = '#/project/' + sel.value;
       }
