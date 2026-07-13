@@ -24,6 +24,8 @@
   font-family: var(--ds-btn-font);
   font-weight: var(--ds-btn-font-weight);
   font-size: var(--ds-btn-font-size-md);
+  line-height: 1;
+  min-height: 36px;
   padding: var(--ds-btn-padding-md);
   border-radius: var(--ds-btn-radius);
   border: none;
@@ -64,11 +66,13 @@
 .ds-btn--sm {
   padding: var(--ds-btn-padding-sm);
   font-size: var(--ds-btn-font-size-sm);
+  min-height: 32px;
 }
 
 .ds-btn--lg {
   padding: var(--ds-btn-padding-lg);
   font-size: var(--ds-btn-font-size-lg);
+  min-height: 44px;
 }
 
 /* Button variants */
@@ -145,11 +149,13 @@
 
 /* Icon-only button */
 .ds-btn--icon {
-  padding: var(--p-space-2);
-  aspect-ratio: 1;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
 }
-.ds-btn--icon.ds-btn--sm { padding: var(--p-space-1-5); }
-.ds-btn--icon.ds-btn--lg { padding: var(--p-space-3); }
+.ds-btn--icon.ds-btn--sm { width: 32px; height: 32px; min-height: 32px; padding: 0; }
+.ds-btn--icon.ds-btn--lg { width: 44px; height: 44px; min-height: 44px; padding: 0; }
 
 /* Loading state */
 .ds-btn--loading {

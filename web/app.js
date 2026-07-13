@@ -352,9 +352,9 @@ function projectCard(p) {
   const archived = p.status === 'archived';
   const actions = archived
     ? `<button class="ds-btn ds-btn--outline ds-btn--sm" data-project-restore="${esc(p.id)}"><i data-lucide="archive-restore" class="ds-icon ds-icon--xs"></i> Restaurar</button>`
-    : `<button class="ds-btn ds-btn--ghost ds-btn--sm" data-project-archive="${esc(p.id)}" title="Arquivar"><i data-lucide="archive" class="ds-icon ds-icon--xs"></i></button>`;
+    : `<button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" data-project-archive="${esc(p.id)}" title="Arquivar"><i data-lucide="archive" class="ds-icon ds-icon--xs"></i></button>`;
   const del = isLegacy ? '' :
-    `<button class="ds-btn ds-btn--ghost ds-btn--sm project-danger" data-project-delete="${esc(p.id)}" data-project-name="${esc(p.name)}" title="Excluir"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>`;
+    `<button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" data-project-delete="${esc(p.id)}" data-project-name="${esc(p.name)}" title="Excluir"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>`;
   return `
     <div class="ds-card ds-card--interactive project-card" role="link" tabindex="0" data-project-open="${esc(p.id)}">
       <div class="ds-card__header">
@@ -748,17 +748,17 @@ async function renderChat(convId) {
       <div class="chat-header">
         <input class="chat-title-input" id="chat-title" value="${esc(title)}" aria-label="Título da conversa">
         <div class="chat-actions">
-          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-pin" title="${meta.pinned ? 'Desafixar' : 'Fixar'}"><i data-lucide="pin" class="ds-icon ds-icon--xs" style="${meta.pinned ? 'color:var(--ds-action-primary)' : ''}"></i></button>
-          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-fork" title="Duplicar"><i data-lucide="copy" class="ds-icon ds-icon--xs"></i></button>
-          <button class="ds-btn ds-btn--ghost ds-btn--sm" id="chat-archive" title="${meta.archived ? 'Desarquivar' : 'Arquivar'}"><i data-lucide="archive" class="ds-icon ds-icon--xs"></i></button>
-          <button class="ds-btn ds-btn--ghost ds-btn--sm project-danger" id="chat-delete" title="Apagar"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" id="chat-pin" title="${meta.pinned ? 'Desafixar' : 'Fixar'}"><i data-lucide="pin" class="ds-icon ds-icon--xs" style="${meta.pinned ? 'color:var(--ds-action-primary)' : ''}"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" id="chat-fork" title="Duplicar"><i data-lucide="copy" class="ds-icon ds-icon--xs"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" id="chat-archive" title="${meta.archived ? 'Desarquivar' : 'Arquivar'}"><i data-lucide="archive" class="ds-icon ds-icon--xs"></i></button>
+          <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" id="chat-delete" title="Apagar"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
         </div>
       </div>
       <div class="chat-timeline" id="chat-timeline">${messagesHtml}</div>
       <div class="chat-composer">
         <textarea class="ds-textarea chat-input" id="chat-input" rows="1" placeholder="Envie uma mensagem..."></textarea>
         <button class="ds-btn ds-btn--danger hidden" id="chat-cancel"><i data-lucide="square" class="ds-icon ds-icon--xs"></i> Cancelar</button>
-        <button class="ds-btn ds-btn--primary" id="chat-send" title="Enviar"><i data-lucide="send" class="ds-icon ds-icon--sm"></i></button>
+        <button class="ds-btn ds-btn--primary ds-btn--icon" id="chat-send" title="Enviar"><i data-lucide="send" class="ds-icon ds-icon--sm"></i></button>
       </div>
     </div>`;
 
