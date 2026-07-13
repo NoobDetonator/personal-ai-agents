@@ -28,6 +28,9 @@ agents/*
 !agents/aria/
 agents/aria/*
 !agents/aria/soul.md
+!agents/revisor-pesquisa/
+agents/revisor-pesquisa/*
+!agents/revisor-pesquisa/soul.md
 
 # Caches e temporários locais
 .cache/

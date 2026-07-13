@@ -1,6 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Agent, looksFabricated } from '../src/agents/agent.js';
+import { Agent, hasRepeatedToolFailure, looksFabricated, looksUnfinished } from '../src/agents/agent.js';
+
+test('nao continua resposta completa apenas porque o provedor retornou length', () => {
+  assert.equal(looksUnfinished('5. Padronizar os documentos legados.', 'length'), false);
+  assert.equal(looksUnfinished('Agora vou atualizar o indice.', 'length'), true);
+  assert.equal(looksUnfinished('Texto cortado no meio da', 'length'), true);
+});
+
+test('circuit breaker abre apos dois erros identicos da mesma ferramenta', () => {
+  assert.equal(hasRepeatedToolFailure([
+    { name: 'saveDeepMemory', output: { error: 'trecho invalido' } },
+    { name: 'saveDeepMemory', output: { error: 'trecho invalido' } },
+  ]), true);
+  assert.equal(hasRepeatedToolFailure([
+    { name: 'saveDeepMemory', output: { error: 'primeiro erro' } },
+    { name: 'saveDeepMemory', output: { success: true }, success: true },
+  ]), false);
+});
 
 test('anti-fabricacao reconhece alegacoes positivas sem tool call', () => {
   const claims = [

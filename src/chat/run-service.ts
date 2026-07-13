@@ -54,7 +54,7 @@ export interface StartChatRunInput {
   text: string;
   /** Executor do turno (injetável em testes). Padrão: o agente real. */
   executor?: TurnExecutor;
-  /** Timeout do turno em ms. Padrão: delegation.timeoutSec. */
+  /** Timeout do turno em ms. Padrao: timeout da delegacao + margem de consolidacao. */
   timeoutMs?: number;
 }
 
@@ -65,6 +65,17 @@ export interface StartChatRunResult {
 }
 
 const activeRuns = new Map<string, AbortController>();
+
+/**
+ * O coordenador inicia antes dos subordinados e ainda precisa consolidar suas
+ * respostas. Dar a ele o mesmo prazo das delegacoes cria uma corrida em que o
+ * turno principal expira poucos segundos antes dos workers.
+ */
+export function chatRunTimeoutMs(delegationTimeoutSec: number): number {
+  const delegationMs = Math.max(1, delegationTimeoutSec) * 1000;
+  const consolidationGraceMs = Math.max(60_000, Math.min(300_000, Math.round(delegationMs * 0.3)));
+  return delegationMs + consolidationGraceMs;
+}
 
 /** Executor padrão: usa o agente registrado e seu streaming. */
 const defaultExecutor: TurnExecutor = async ({ agentId, messages, handlers, abortSignal }) => {
@@ -139,8 +150,9 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
   });
 
   const executor = input.executor ?? executorOverride ?? defaultExecutor;
-  const timeoutMs = input.timeoutMs
-    ?? (getProjectSettings(ctx.projectId)?.delegation_timeout_sec ?? getConfig().delegation.timeoutSec) * 1000;
+  const delegationTimeoutSec = getProjectSettings(ctx.projectId)?.delegation_timeout_sec
+    ?? getConfig().delegation.timeoutSec;
+  const timeoutMs = input.timeoutMs ?? chatRunTimeoutMs(delegationTimeoutSec);
   const done = executeRun(runId, ctx, input.conversationId, executor, timeoutMs);
   return { runId, done };
 }

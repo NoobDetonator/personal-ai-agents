@@ -37,6 +37,11 @@ function newConversation(): string {
   return convSvc.createProjectConversation(projectId, 'aria', { title: 'teste' });
 }
 
+test('turno coordenador recebe margem para consolidar depois das delegacoes', () => {
+  assert.equal(runService.chatRunTimeoutMs(300), 390_000);
+  assert.equal(runService.chatRunTimeoutMs(10), 70_000);
+});
+
 test('run bem-sucedido persiste mensagens, eventos ordenados e status done', async () => {
   const conversationId = newConversation();
   const { runId, done } = runService.startChatRun({

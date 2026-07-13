@@ -299,5 +299,18 @@ export const DEFAULT_CONFIG: AppConfig = {
       parent: null,
       team: null,
     },
+    'revisor-pesquisa': {
+      name: 'Revisor-pesquisa',
+      description: 'Revisor independente de datas, fontes, versoes e consistencia documental',
+      provider: null,
+      model: null,
+      enabled: true,
+      role: 'worker',
+      parent: 'aria',
+      team: null,
+      temporary: false,
+      profile: 'revisor-pesquisa',
+      profileRevision: '26f9a756d1bb',
+    },
   },
 };

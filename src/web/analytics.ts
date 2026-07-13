@@ -108,7 +108,7 @@ export function getAnalytics(db: Database.Database, agents: AnalyticsAgentInfo[]
     `SELECT
        SUM(CASE WHEN u.created_at >= ? THEN COALESCE(u.cost_usd, 0) ELSE 0 END) AS curCost,
        SUM(CASE WHEN u.created_at < ? THEN COALESCE(u.cost_usd, 0) ELSE 0 END) AS prevCost,
-       SUM(CASE WHEN u.created_at >= ? AND u.cost_usd IS NULL THEN 1 ELSE 0 END) AS curUnknown,
+       SUM(CASE WHEN u.created_at >= ? AND (u.cost_usd IS NULL OR u.usage_known = 0) THEN 1 ELSE 0 END) AS curUnknown,
        SUM(CASE WHEN u.created_at >= ? THEN u.cached_tokens ELSE 0 END) AS curCached,
        SUM(CASE WHEN u.created_at >= ? THEN u.input_tokens ELSE 0 END) AS curInput,
        SUM(CASE WHEN u.created_at < ? THEN u.cached_tokens ELSE 0 END) AS prevCached,
@@ -286,7 +286,7 @@ export function getAnalytics(db: Database.Database, agents: AnalyticsAgentInfo[]
   for (const row of messageProjects) Object.assign(ensureProject(row.projectId), { inputTokens: row.inp ?? 0, outputTokens: row.outp ?? 0 });
   const usageProjects = db.prepare(
     `SELECT COALESCE(u.project_id, 'legacy') AS projectId, SUM(COALESCE(u.cost_usd, 0)) AS cost,
-       SUM(CASE WHEN u.cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown
+       SUM(CASE WHEN u.cost_usd IS NULL OR u.usage_known = 0 THEN 1 ELSE 0 END) AS unknown
      FROM usage_events u WHERE u.created_at >= ?${usageAgent.sql}${usageProject.sql} GROUP BY projectId`,
   ).all(since, ...usageAgent.params, ...usageProject.params) as Array<{ projectId: string; cost: number; unknown: number }>;
   for (const row of usageProjects) Object.assign(ensureProject(row.projectId), { cost: row.cost ?? 0, costKnown: (row.unknown ?? 0) === 0 });

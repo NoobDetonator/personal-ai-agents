@@ -81,3 +81,29 @@ test('particionamento preserva tarefas com delegacao ativa', () => {
     { deletableIds: ['done-1'], skippedActive: 2 },
   );
 });
+
+test('consolidacao, indice e revisao ficam depois dos trabalhos produtores', () => {
+  const plan = taskModule.partitionDelegationStages([
+    { agentId: 'a', prompt: 'Pesquise regras de combate', stage: 'work' },
+    { agentId: 'b', prompt: 'Atualize o índice central com todos os documentos' },
+    { agentId: 'c', prompt: 'Faça a revisão final de fontes', stage: 'finalize' },
+  ]);
+  assert.deepEqual(plan.work.map(item => item.agentId), ['a']);
+  assert.deepEqual(plan.finalizers.map(item => item.agentId), ['b', 'c']);
+});
+
+test('reconcilia automaticamente o estado da tarefa-mae pelas subtarefas', () => {
+  const db = dbModule.getDb();
+  db.prepare("INSERT INTO tasks (id, title, status) VALUES ('parent', 'mae', 'pending')").run();
+  db.prepare("INSERT INTO tasks (id, parent_id, title, status) VALUES ('child-a', 'parent', 'a', 'done'), ('child-b', 'parent', 'b', 'pending')").run();
+
+  taskModule.reconcileTaskAncestors('child-a');
+  assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 'parent'").get() as any).status, 'in_progress');
+
+  db.prepare("UPDATE tasks SET status = 'failed' WHERE id = 'child-b'").run();
+  taskModule.reconcileTaskAncestors('child-b');
+  const parent = db.prepare("SELECT status, result FROM tasks WHERE id = 'parent'").get() as any;
+  assert.equal(parent.status, 'failed');
+  assert.match(parent.result, /done: 1/);
+  assert.match(parent.result, /failed: 1/);
+});

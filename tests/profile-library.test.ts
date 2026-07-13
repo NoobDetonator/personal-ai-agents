@@ -16,7 +16,7 @@ function countWords(text: string): number {
 
 test('biblioteca tem inventario esperado e perfis operacionais compactos', () => {
   const files = fs.readdirSync(profilesDir).filter(file => file.endsWith('.md')).sort();
-  assert.equal(files.length, 19);
+  assert.equal(files.length, 20);
 
   for (const file of files) {
     const words = countWords(read(file));
@@ -55,6 +55,10 @@ test('regras sensiveis estao condicionadas ao runtime real', () => {
   const researcher = read('pesquisador.md');
   assert.match(researcher, /uma fonte primaria forte pode bastar/i);
   assert.match(researcher, /tres ou mais quando o tema for disputado/i);
+
+  const researchReviewer = read('revisor-pesquisa.md');
+  assert.match(researchReviewer, /data real do sistema/i);
+  assert.match(researchReviewer, /fontes comunitárias rotuladas como secundárias/i);
 
   const analyst = read('analista-dados.md');
   assert.match(analyst, /Nao presuma pandas, Excel/i);

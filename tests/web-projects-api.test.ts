@@ -305,7 +305,7 @@ test('GET /api/state usa telemetria real de delegacoes para modelo e tokens dos 
   const scopedAria = scoped.json.agents.find((agent: any) => agent.id === 'aria');
   assert.equal(scopedAria.model, 'deepseek-v4-pro');
   assert.equal(scopedAria.modelSource, 'project');
-  assert.deepEqual(scopedAria.tokens, { input: 0, output: 0 });
+  assert.deepEqual(scopedAria.tokens, { input: 0, output: 0, unmetered: 0 });
   assert.equal(scoped.json.config.model, 'deepseek-v4-pro');
 });
 

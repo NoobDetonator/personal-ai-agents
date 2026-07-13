@@ -31,6 +31,7 @@ let outputTokens = 0;
 let cachedInputTokens = 0;
 let costUsd = 0;
 let costKnown = true; // false se alguma chamada usou modelo sem preco na tabela
+let unmeteredCalls = 0;
 
 /** Custo (USD) de uma chamada; null quando o modelo nao tem preco tabelado. */
 export function computeCallCost(input: number, output: number, cached: number, modelId: string): number | null {
@@ -44,6 +45,8 @@ export interface UsageMeta {
   agentId?: string;
   kind?: 'chat' | 'recall' | 'summary';
   durationMs?: number;
+  /** false quando timeout/cancelamento permite apenas uma contagem parcial. */
+  usageKnown?: boolean;
 }
 
 export function addUsage(input: number, output: number, cached: number, modelId: string, meta?: UsageMeta): void {
@@ -53,9 +56,12 @@ export function addUsage(input: number, output: number, cached: number, modelId:
   cachedInputTokens += cached;
 
   const callCost = computeCallCost(input, output, cached, modelId);
+  const usageKnown = meta?.usageKnown !== false;
+  if (!usageKnown) unmeteredCalls++;
   if (callCost != null) {
     costUsd += callCost;
-  } else {
+  }
+  if (callCost == null || !usageKnown) {
     costKnown = false;
   }
 
@@ -63,8 +69,8 @@ export function addUsage(input: number, output: number, cached: number, modelId:
   // ex.: testes que usam addUsage sem banco inicializado).
   try {
     getDb().prepare(
-      `INSERT INTO usage_events (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, cost_usd, duration_ms, project_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO usage_events (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, cost_usd, duration_ms, project_id, usage_known)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       randomUUID(),
       meta?.agentId ?? null,
@@ -76,6 +82,7 @@ export function addUsage(input: number, output: number, cached: number, modelId:
       callCost,
       meta?.durationMs ?? null,
       getProjectContext()?.projectId ?? 'legacy',
+      usageKnown ? 1 : 0,
     );
   } catch {
     // sem banco: mantem apenas os contadores de sessao
@@ -89,6 +96,9 @@ export interface SessionUsage {
   cachedInputTokens: number;
   cacheHitRate: number; // 0..1
   costUsd: number | null; // null quando algum modelo nao tem preco tabelado
+  minimumCostUsd: number;
+  costKnown: boolean;
+  unmeteredCalls: number;
 }
 
 export function getSessionUsage(): SessionUsage {
@@ -99,5 +109,8 @@ export function getSessionUsage(): SessionUsage {
     cachedInputTokens,
     cacheHitRate: inputTokens > 0 ? cachedInputTokens / inputTokens : 0,
     costUsd: costKnown ? costUsd : null,
+    minimumCostUsd: costUsd,
+    costKnown,
+    unmeteredCalls,
   };
 }

@@ -25,6 +25,7 @@ async function renderAgents() {
           ${aiBadge(a.provider, a.model)}
           ${a.modelSource === 'last_usage' ? '<span class="ds-caption">ultimo uso</span>' : a.modelSource === 'project' ? '<span class="ds-caption">modelo do projeto · sem uso contabilizado</span>' : ''}
           <span class="ds-chip">${fmtTokens(a.tokens.input)}↓ ${fmtTokens(a.tokens.output)}↑</span>
+          ${a.tokens.unmetered ? `<span class="ds-badge ds-badge--warning">${a.tokens.unmetered} parcial(is)</span>` : ''}
         </div>
       </div>
     </div>
@@ -77,6 +78,7 @@ async function renderAgentDetail(id) {
           ${a.modelSource === 'last_usage' ? '<span class="ds-caption">ultimo uso real</span>' : ''}
           <span class="ds-chip">${a.stats.messages} mensagens</span>
           <span class="ds-chip">${a.stats.calls ?? 0} chamadas de IA</span>
+          ${a.stats.unmeteredCalls ? `<span class="ds-badge ds-badge--warning">${a.stats.unmeteredCalls} parcial(is)</span>` : ''}
           <span class="ds-chip">${fmtTokens(a.stats.inputTokens)}↓ ${fmtTokens(a.stats.outputTokens)}↑</span>
         </div>
       </div>

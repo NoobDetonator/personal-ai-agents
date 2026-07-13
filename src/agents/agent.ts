@@ -1,4 +1,4 @@
-import { generateText, streamText, stepCountIs, type ToolSet, type ModelMessage, type LanguageModel } from 'ai';
+import { generateText, streamText, stepCountIs, type ToolSet, type ModelMessage, type LanguageModel, type StopCondition } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
@@ -105,11 +105,44 @@ export function getSideQueryModel(): LanguageModel {
 const PROMISE_ENDING = /\b(vou|irei|agora vou|deixa eu|em seguida vou|passo agora a)\b[^.!?…]{0,80}[.!…]?\s*$/i;
 
 export function looksUnfinished(text: string, finishReason: string): boolean {
-  if (finishReason === 'tool-calls' || finishReason === 'length') return true;
   const tail = text.trim().slice(-200);
   if (tail.endsWith('?')) return false; // pergunta ao usuario = turno completo
+  if (finishReason === 'tool-calls') return true;
+  if (finishReason === 'length') {
+    // Alguns provedores retornam "length" exatamente no ultimo token de uma
+    // sintese ja completa. Continuar nesses casos reinicia/duplica a resposta.
+    // So retomamos quando o texto realmente parece cortado ou promete acao.
+    return PROMISE_ENDING.test(tail) || !/[.!?…\])}"'`]\s*$/.test(tail);
+  }
   return PROMISE_ENDING.test(tail);
 }
+
+function failureKey(name: string, output: unknown): string | null {
+  if (isToolOutputSuccess(output)) return null;
+  let detail: string;
+  try { detail = JSON.stringify(output); } catch { detail = String(output); }
+  return `${name}:${detail.slice(0, 500)}`;
+}
+
+export function hasRepeatedToolFailure(
+  records: Array<{ name: string; output?: unknown; success?: boolean }>,
+  threshold = 2,
+): boolean {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    if (record.success === true) continue;
+    const key = failureKey(record.name, record.output);
+    if (!key) continue;
+    const count = (counts.get(key) ?? 0) + 1;
+    if (count >= threshold) return true;
+    counts.set(key, count);
+  }
+  return false;
+}
+
+const stopOnRepeatedToolFailure: StopCondition<ToolSet> = ({ steps }) => hasRepeatedToolFailure(
+  steps.flatMap(step => step.toolResults.map(result => ({ name: result.toolName, output: result.output }))),
+);
 
 export const MISSING_TOOL_RETRY_HINT =
   '[Verificacao do sistema] O usuario pediu uma acao concreta, mas nenhuma ferramenta relevante foi executada. Nao apenas descreva ou apresente um exemplo: CHAME agora a ferramenta apropriada. Se nao puder, tente a ferramenta e reporte honestamente o erro ou a negacao.';
@@ -442,16 +475,24 @@ export class Agent {
     for (const skillId of activated.ids) recordAgentRuntimeEvent(this.id, 'skill_activated', { skillId });
     const turnSystem = [this.buildSystemPrompt(), activated.systemBlock, opts?.systemHint].filter(Boolean).join('\n\n');
 
+    const usageModel = this.resolveProviderAndModel().model;
     const result = await generateText({
       model: this.getModel(),
       system: turnSystem,
       messages: this.buildMessagesWithContext(messages, opts?.contextData),
       tools: this.tools,
       prepareStep: prepareToolStep(toolRouting, this.firstToolChoice()),
-      stopWhen: stepCountIs(this.getMaxSteps()),
+      stopWhen: [stepCountIs(this.getMaxSteps()), stopOnRepeatedToolFailure],
       maxOutputTokens: config.ai.maxOutputTokens,
       temperature,
       abortSignal: opts?.abortSignal,
+    }).catch(error => {
+      addUsage(0, 0, 0, usageModel, {
+        agentId: this.id,
+        durationMs: Date.now() - startedAt,
+        usageKnown: false,
+      });
+      throw error;
     });
 
     const toolCallCount = result.steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
@@ -476,7 +517,7 @@ export class Agent {
     const outputTokens = result.usage?.outputTokens ?? 0;
     const cachedInputTokens =
       result.usage?.inputTokenDetails?.cacheReadTokens ?? result.usage?.cachedInputTokens ?? 0;
-    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model, {
+    addUsage(inputTokens, outputTokens, cachedInputTokens, usageModel, {
       agentId: this.id,
       durationMs: Date.now() - startedAt,
     });
@@ -538,7 +579,7 @@ export class Agent {
       messages: this.buildMessagesWithContext(messages, opts?.contextData),
       tools: this.tools,
       prepareStep: prepareToolStep(toolRouting, this.firstToolChoice()),
-      stopWhen: stepCountIs(this.getMaxSteps()),
+      stopWhen: [stepCountIs(this.getMaxSteps()), stopOnRepeatedToolFailure],
       maxOutputTokens: config.ai.maxOutputTokens,
       temperature,
       abortSignal: opts?.abortSignal,
@@ -552,9 +593,11 @@ export class Agent {
     const toolExecutions: ToolExecutionRecord[] = [];
     const pendingToolCalls = new Map<string, string>();
     let finishReason = 'stop';
+    let usageComplete = false;
 
-    for await (const part of result.fullStream) {
-      switch (part.type) {
+    try {
+      for await (const part of result.fullStream) {
+        switch (part.type) {
         case 'text-delta':
           text += part.text;
           handlers.onTextDelta?.(part.text);
@@ -581,12 +624,19 @@ export class Agent {
           });
           handlers.onToolResult?.(part.toolName, part.output);
           break;
+        case 'finish-step':
+          inputTokens += part.usage.inputTokens ?? 0;
+          outputTokens += part.usage.outputTokens ?? 0;
+          cachedInputTokens +=
+            part.usage.inputTokenDetails?.cacheReadTokens ?? part.usage.cachedInputTokens ?? 0;
+          break;
         case 'finish':
           inputTokens = part.totalUsage.inputTokens ?? 0;
           outputTokens = part.totalUsage.outputTokens ?? 0;
           cachedInputTokens =
             part.totalUsage.inputTokenDetails?.cacheReadTokens ?? part.totalUsage.cachedInputTokens ?? 0;
           finishReason = String(part.finishReason);
+          usageComplete = true;
           break;
         case 'abort':
           // Abort pode chegar como parte do stream em vez de excecao —
@@ -594,13 +644,15 @@ export class Agent {
           throw new Error('Chamada abortada (timeout ou cancelamento).');
         case 'error':
           throw part.error instanceof Error ? part.error : new Error(String(part.error));
+        }
       }
+    } finally {
+      addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model, {
+        agentId: this.id,
+        durationMs: Date.now() - startedAt,
+        usageKnown: usageComplete,
+      });
     }
-
-    addUsage(inputTokens, outputTokens, cachedInputTokens, this.resolveProviderAndModel().model, {
-      agentId: this.id,
-      durationMs: Date.now() - startedAt,
-    });
     for (const [toolCallId, name] of pendingToolCalls) {
       toolExecutions.push({ toolCallId, name, effect: getToolEffect(name), success: false });
     }
@@ -638,7 +690,7 @@ export class Agent {
 
     let result = await execute();
     let continuations = 0;
-    while (looksUnfinished(result.text, result.finishReason) && continuations < 2) {
+    while (looksUnfinished(result.text, result.finishReason) && !hasRepeatedToolFailure(toolExecutions) && continuations < 2) {
       continuations++;
       handlers.onGuardRetry?.('unfinished');
       working.push({ role: 'assistant', content: result.text });
@@ -647,6 +699,9 @@ export class Agent {
     }
 
     let finalText = result.text;
+    if (hasRepeatedToolFailure(toolExecutions) && !finalText.trim()) {
+      finalText = '[FALHA] A execucao foi interrompida apos a mesma ferramenta retornar o mesmo erro duas vezes.';
+    }
     const requestedRouting = routeToolsForMessages(messages, this.tools);
     const hasRelevantSuccess = () => toolExecutions.some(
       record => record.success && requestedRouting.requiredEffects.includes(record.effect),

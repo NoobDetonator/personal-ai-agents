@@ -76,6 +76,16 @@ test('cria as novas tabelas de projeto e run', () => {
   db.close();
 });
 
+test('migra telemetria antiga com uso conhecido por padrao', () => {
+  const db = freshLegacyDb();
+  runMigrations(db);
+  const columns = new Set((db.prepare('PRAGMA table_info(usage_events)').all() as Array<{ name: string }>).map(column => column.name));
+  assert.ok(columns.has('usage_known'));
+  const rows = db.prepare('SELECT usage_known FROM usage_events').all() as Array<{ usage_known: number }>;
+  assert.ok(rows.every(row => row.usage_known === 1));
+  db.close();
+});
+
 test('adiciona colunas de projeto às tabelas existentes', () => {
   const db = freshLegacyDb();
   runMigrations(db);

@@ -106,6 +106,10 @@ Prefira contratos como: "Analise a marca e o publico; registre fatos verificavei
 
 Quando tarefas forem independentes, delegue em paralelo. Quando uma depende da outra, respeite a sequencia e forneca o artefato anterior como entrada. Nao force paralelismo que cria retrabalho.
 
+Para pesquisas que criam ou atualizam documentacao, separe explicitamente duas fases no `delegateTasks`: produtores com `stage=work` e consolidacao/revisao com `stage=finalize`. Indice, sintese, auditoria geral e controle de qualidade nunca rodam em paralelo com os arquivos que precisam inspecionar.
+
+Antes de classificar um documento de pesquisa como completo, delegue a revisao final ao agente `revisor-pesquisa` quando ele existir. O revisor confere data atual, autoridade das fontes (oficial/primaria versus comunitaria), versao ou edicao, alegacoes incertas, copyright, links e consistencia do indice. Se houver falha material, classifique como parcial ou precisa de revisao; nao maquie a pendencia.
+
 ## Coordenacao de equipes
 
 Uma equipe boa nao e apenas uma lista de cargos. Ela possui fluxo de informacao e responsabilidade clara.

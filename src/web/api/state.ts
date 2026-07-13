@@ -26,10 +26,13 @@ export function apiState(params?: URLSearchParams): unknown {
   const usageScope = projectSettings ? " AND COALESCE(project_id, 'legacy') = ?" : '';
   const usageParams = projectSettings ? [requestedProject] : [];
   const tokenRows = db.prepare(
-    `SELECT agent_id, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp
+    `SELECT agent_id, SUM(input_tokens) AS inp, SUM(output_tokens) AS outp,
+            SUM(CASE WHEN usage_known = 0 THEN 1 ELSE 0 END) AS unmetered
      FROM usage_events WHERE agent_id IS NOT NULL${usageScope} GROUP BY agent_id`,
-  ).all(...usageParams) as Array<{ agent_id: string; inp: number; outp: number }>;
-  const tokensByAgent = new Map(tokenRows.map(row => [row.agent_id, { input: row.inp ?? 0, output: row.outp ?? 0 }]));
+  ).all(...usageParams) as Array<{ agent_id: string; inp: number; outp: number; unmetered: number }>;
+  const tokensByAgent = new Map(tokenRows.map(row => [row.agent_id, {
+    input: row.inp ?? 0, output: row.outp ?? 0, unmetered: row.unmetered ?? 0,
+  }]));
   const latestModels = new Map<string, string>();
   const latestRows = db.prepare(
     `SELECT agent_id, model FROM usage_events
@@ -58,7 +61,7 @@ export function apiState(params?: URLSearchParams): unknown {
       configuredModel: projectSettings?.default_model ?? agent.model ?? config.ai.model,
       modelSource: latestModels.has(id) ? 'last_usage' : projectSettings?.default_model ? 'project' : 'configuration',
       profileProvenance: resolveAgentProfileProvenance(agent, profiles),
-      tokens: tokensByAgent.get(id) ?? { input: 0, output: 0 },
+      tokens: tokensByAgent.get(id) ?? { input: 0, output: 0, unmetered: 0 },
     })),
     config: {
       provider: projectSettings?.default_provider ?? config.ai.provider,
@@ -98,8 +101,10 @@ export function apiAgent(id: string, projectId?: string | null): unknown | null 
   const scope = projectSettings ? " AND COALESCE(project_id, 'legacy') = ?" : '';
   const params = projectSettings ? [id, projectId] : [id];
   const tokens = db.prepare(
-    `SELECT SUM(input_tokens) AS inp, SUM(output_tokens) AS outp, COUNT(*) AS calls FROM usage_events WHERE agent_id = ?${scope}`,
-  ).get(...params) as { inp: number | null; outp: number | null; calls: number };
+    `SELECT SUM(input_tokens) AS inp, SUM(output_tokens) AS outp, COUNT(*) AS calls,
+            SUM(CASE WHEN usage_known = 0 THEN 1 ELSE 0 END) AS unmetered
+     FROM usage_events WHERE agent_id = ?${scope}`,
+  ).get(...params) as { inp: number | null; outp: number | null; calls: number; unmetered: number | null };
   const messageCount = db.prepare('SELECT COUNT(*) AS count FROM messages WHERE agent_id = ?').get(id) as { count: number };
   const latestUsage = db.prepare(
     `SELECT model FROM usage_events WHERE agent_id = ?${scope} ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 1`,
@@ -118,7 +123,10 @@ export function apiAgent(id: string, projectId?: string | null): unknown | null 
     dailyNote: readDailyNote(id),
     conversations,
     commands,
-    stats: { inputTokens: tokens.inp ?? 0, outputTokens: tokens.outp ?? 0, messages: messageCount.count, calls: tokens.calls },
+    stats: {
+      inputTokens: tokens.inp ?? 0, outputTokens: tokens.outp ?? 0, messages: messageCount.count,
+      calls: tokens.calls, unmeteredCalls: tokens.unmetered ?? 0,
+    },
   };
 }
 

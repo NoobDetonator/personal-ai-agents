@@ -71,6 +71,7 @@ export function cancelDelegation(id: string): boolean {
 
 export function listTaskRows(status?: string, team?: string, projectId?: string): TaskRow[] {
   const db = getDb();
+  reconcileAllTaskParents(projectId);
   const where: string[] = [];
   const params: string[] = [];
   if (status) {
@@ -89,12 +90,84 @@ export function listTaskRows(status?: string, team?: string, projectId?: string)
   return db.prepare(sql).all(...params) as TaskRow[];
 }
 
+export interface DelegationPlanItem {
+  agentId: string;
+  prompt: string;
+  taskId?: string;
+  stage?: 'work' | 'finalize';
+}
+
+const FINALIZATION_PROMPT = /\b(consolid(?:ar|acao)|sintese final|indice central|auditoria (?:geral|final)|revisao final|controle de qualidade|quality gate)\b/i;
+
+function normalizedPrompt(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/** Consolidadores e revisores precisam enxergar os artefatos dos produtores. */
+export function partitionDelegationStages<T extends DelegationPlanItem>(items: T[]): { work: T[]; finalizers: T[] } {
+  const work: T[] = [];
+  const finalizers: T[] = [];
+  for (const item of items) {
+    const finalizer = item.stage === 'finalize'
+      || (item.stage !== 'work' && FINALIZATION_PROMPT.test(normalizedPrompt(item.prompt)));
+    (finalizer ? finalizers : work).push(item);
+  }
+  return { work, finalizers };
+}
+
+export function reconcileTaskAncestors(taskId: string, projectId?: string): void {
+  const db = getDb();
+  const scope = projectId ? " AND COALESCE(project_id, 'legacy') = ?" : '';
+  const params = projectId ? [projectId] : [];
+  let currentId: string | null = taskId;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const current = db.prepare(`SELECT parent_id FROM tasks WHERE id = ?${scope}`)
+      .get(currentId, ...params) as { parent_id: string | null } | undefined;
+    const parentId: string | null = current?.parent_id ?? null;
+    if (!parentId) break;
+    const children = db.prepare(`SELECT status FROM tasks WHERE parent_id = ?${scope}`)
+      .all(parentId, ...params) as Array<{ status: string }>;
+    if (children.length === 0) break;
+
+    const counts = new Map<string, number>();
+    for (const child of children) counts.set(child.status, (counts.get(child.status) ?? 0) + 1);
+    const hasOpen = children.some(child => child.status === 'pending' || child.status === 'in_progress');
+    const nextStatus = hasOpen
+      ? 'in_progress'
+      : (counts.get('failed') ?? 0) > 0
+        ? 'failed'
+        : (counts.get('cancelled') ?? 0) > 0
+          ? 'cancelled'
+          : 'done';
+    const summary = [...counts.entries()].map(([status, count]) => `${status}: ${count}`).join(', ');
+    db.prepare(
+      `UPDATE tasks SET status = ?, result = ?, updated_at = datetime('now') WHERE id = ?${scope}`,
+    ).run(nextStatus, `Subtarefas — ${summary}`, parentId, ...params);
+    currentId = parentId;
+  }
+}
+
+export function reconcileAllTaskParents(projectId?: string): number {
+  const db = getDb();
+  const scope = projectId ? " AND COALESCE(project_id, 'legacy') = ?" : '';
+  const params = projectId ? [projectId] : [];
+  const children = db.prepare(
+    `SELECT MIN(id) AS id FROM tasks WHERE parent_id IS NOT NULL${scope} GROUP BY parent_id`,
+  ).all(...params) as Array<{ id: string }>;
+  for (const child of children) reconcileTaskAncestors(child.id, projectId);
+  return children.length;
+}
+
 function setTaskStatus(taskId: string, status: string, result?: string, projectId?: string): boolean {
   const db = getDb();
   const scope = projectId ? " AND COALESCE(project_id, 'legacy') = ?" : '';
   const info = db.prepare(
     "UPDATE tasks SET status = ?, result = COALESCE(?, result), updated_at = datetime('now') WHERE id = ?" + scope
   ).run(status, result ?? null, taskId, ...(projectId ? [projectId] : []));
+  if (info.changes > 0) reconcileTaskAncestors(taskId, projectId);
   return info.changes > 0;
 }
 
@@ -178,6 +251,7 @@ async function delegateToAgent(
       },
       context:
         `Voce recebeu uma tarefa delegada pelo seu superior "${createdBy}". ` +
+        `A data atual do sistema e ${new Date().toISOString().slice(0, 10)}. Use essa data para acessos e verificacoes feitos agora; nunca invente ou reutilize uma data antiga. ` +
         'Execute a tarefa da melhor forma possivel usando suas ferramentas e responda com o resultado objetivo, no formato pedido. ' +
         'Seu manual operacional de perfil ja esta ativo no system prompt: aplique o fluxo, os principios, os anti-padroes e o gate final sem esperar nova instrucao. ' +
         'Nao entregue apenas o minimo mecanico: dentro do escopo, cuide de completude, consistencia, estados relevantes, qualidade tecnica e acabamento. ' +
@@ -269,6 +343,7 @@ export function createTaskTools(agentId: string): ToolSet {
       db.prepare(
         'INSERT INTO tasks (id, parent_id, title, description, assignee, status, created_by, team, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(id, parentId ?? null, title, description ?? null, assignee ?? null, 'pending', agentId, resolvedTeam, projectId);
+      reconcileTaskAncestors(id, projectId);
       return { success: true, taskId: id, team: resolvedTeam, projectId };
     },
   });
@@ -406,7 +481,7 @@ export function createTaskTools(agentId: string): ToolSet {
   });
   const delegateTasks = tool({
     description:
-      'Delegar VARIOS trabalhos em paralelo (para tarefas independentes). Cada item vai para um agente com seu proprio prompt completo.',
+      'Delegar VARIOS trabalhos. Itens stage=work rodam em paralelo; stage=finalize roda depois de TODOS os trabalhos, em sequencia, para consolidacao, indice ou revisao.',
     inputSchema: z.object({
       delegations: z
         .array(
@@ -414,6 +489,7 @@ export function createTaskTools(agentId: string): ToolSet {
             agentId: z.string().describe('ID do agente executor'),
             prompt: z.string().describe('Instrucao completa da tarefa'),
             taskId: z.string().optional().describe('ID da tarefa do board associada'),
+            stage: z.enum(['work', 'finalize']).optional().describe('Use finalize para indice, sintese, auditoria final ou revisao dependente dos outros resultados'),
           })
         )
         .min(1)
@@ -421,15 +497,22 @@ export function createTaskTools(agentId: string): ToolSet {
         .describe('Lista de delegacoes a executar em paralelo'),
     }),
     execute: async ({ delegations }, options) => {
-      const results = await runWithConcurrency(
-        delegations,
-        getProjectSettings(getProjectContext()?.projectId ?? 'legacy')?.max_concurrency ?? getConfig().delegation.concurrency,
-        d => {
+      const indexed = delegations.map((delegation, index) => ({ ...delegation, index }));
+      const { work, finalizers } = partitionDelegationStages(indexed);
+      const results: Array<Awaited<ReturnType<typeof delegateToAgent>>> = new Array(delegations.length);
+      const executeDelegation = async (d: typeof indexed[number]) => {
           if (options.abortSignal?.aborted) throw options.abortSignal.reason ?? new Error('Turno principal encerrado.');
-          return delegateToAgent(d.agentId, d.prompt, d.taskId, agentId, options.abortSignal);
-        },
+          const result = await delegateToAgent(d.agentId, d.prompt, d.taskId, agentId, options.abortSignal);
+          results[d.index] = result;
+          return result;
+      };
+      await runWithConcurrency(
+        work,
+        getProjectSettings(getProjectContext()?.projectId ?? 'legacy')?.max_concurrency ?? getConfig().delegation.concurrency,
+        executeDelegation,
       );
-      return { results };
+      for (const finalizer of finalizers) await executeDelegation(finalizer);
+      return { results, execution: { parallel: work.length, finalizers: finalizers.length } };
     },
   });
 

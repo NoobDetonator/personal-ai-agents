@@ -86,6 +86,7 @@ export function runMigrations(db: Database.Database): void {
       cached_tokens INTEGER NOT NULL DEFAULT 0,
       cost_usd      REAL,
       duration_ms   INTEGER,
+      usage_known   INTEGER NOT NULL DEFAULT 1,
       created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -442,6 +443,7 @@ function runProjectMigrations(db: Database.Database): void {
 
   addColumnIfMissing(db, 'tasks', 'project_id', 'project_id TEXT');
   addColumnIfMissing(db, 'usage_events', 'project_id', 'project_id TEXT');
+  addColumnIfMissing(db, 'usage_events', 'usage_known', 'usage_known INTEGER NOT NULL DEFAULT 1');
   addColumnIfMissing(db, 'schedules', 'project_id', 'project_id TEXT');
 
   db.exec(`

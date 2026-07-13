@@ -93,3 +93,18 @@ test('memorias e uso ficam isolados por projeto', () => {
   ).all(a.id, b.id) as Array<{ project_id: string; count: number }>;
   assert.deepEqual(new Map(rows.map(row => [row.project_id, row.count])), new Map([[a.id, 1], [b.id, 1]]));
 });
+
+test('uso interrompido preserva contagem parcial e marca total como nao mensurado', () => {
+  const project = projects.createProject({ name: 'Uso parcial' });
+  context.runWithProjectContext(projects.buildProjectContext(project.id), () => {
+    usage.addUsage(120, 8, 100, 'deepseek-v4-pro', { agentId: 'aria', usageKnown: false });
+  });
+  const row = connection.getDb().prepare(
+    'SELECT input_tokens, output_tokens, cached_tokens, usage_known, cost_usd FROM usage_events WHERE project_id = ? ORDER BY rowid DESC LIMIT 1',
+  ).get(project.id) as any;
+  assert.deepEqual(
+    { input: row.input_tokens, output: row.output_tokens, cached: row.cached_tokens, known: row.usage_known },
+    { input: 120, output: 8, cached: 100, known: 0 },
+  );
+  assert.ok(row.cost_usd > 0);
+});
