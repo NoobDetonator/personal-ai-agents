@@ -13,6 +13,7 @@ let convSvc: typeof import('../src/projects/conversation-service.js');
 let runHelpers: typeof import('../src/db/run-helpers.js');
 let runService: typeof import('../src/chat/run-service.js');
 let confirm: typeof import('../src/chat/confirm.js');
+let projectContext: typeof import('../src/projects/context.js');
 
 let projectId: string;
 
@@ -25,6 +26,7 @@ before(async () => {
   runHelpers = await import('../src/db/run-helpers.js');
   runService = await import('../src/chat/run-service.js');
   confirm = await import('../src/chat/confirm.js');
+  projectContext = await import('../src/projects/context.js');
   connection.initDatabase();
   projectId = svc.createProject({ name: 'Chat' }).id;
 });
@@ -83,6 +85,45 @@ test('run bem-sucedido persiste mensagens, eventos ordenados e status done', asy
   assert.equal(msgs[1].role, 'assistant');
   assert.equal(msgs[1].content, 'oi pronto');
   assert.equal(msgs[1].run_id, runId);
+});
+
+test('run aplica modelo do projeto e permite sobrescrita por conversa', async () => {
+  svc.updateProjectSettings(projectId, {
+    default_model: 'deepseek-v4-pro',
+    default_provider: 'deepseek',
+  });
+  const conversationId = newConversation();
+  const observed: Array<{ model?: string; provider?: string }> = [];
+
+  const inherited = runService.startChatRun({
+    conversationId,
+    text: 'modelo do projeto',
+    executor: async () => {
+      const context = projectContext.requireProjectContext();
+      observed.push({ model: context.model, provider: context.provider });
+      return { text: 'ok', inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, toolCallCount: 0, finishReason: 'stop' };
+    },
+  });
+  assert.equal(await inherited.done, 'done');
+
+  convSvc.patchConversation(conversationId, {
+    modelOverride: 'glm-5.2',
+    providerOverride: 'zai',
+  });
+  const overridden = runService.startChatRun({
+    conversationId,
+    text: 'modelo da conversa',
+    executor: async () => {
+      const context = projectContext.requireProjectContext();
+      observed.push({ model: context.model, provider: context.provider });
+      return { text: 'ok', inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, toolCallCount: 0, finishReason: 'stop' };
+    },
+  });
+  assert.equal(await overridden.done, 'done');
+  assert.deepEqual(observed, [
+    { model: 'deepseek-v4-pro', provider: 'deepseek' },
+    { model: 'glm-5.2', provider: 'zai' },
+  ]);
 });
 
 test('retomada: listRunEvents(after) devolve só a cauda após um sequence', async () => {
@@ -144,6 +185,31 @@ test('timeout vira status timed_out visível', async () => {
   const status = await done;
   assert.equal(status, 'timed_out');
   assert.equal(runHelpers.getRun(runId)!.status, 'timed_out');
+});
+
+test('turno novo depois de timeout nao recebe a tarefa terminal no historico', async () => {
+  const conversationId = newConversation();
+  const timedOut = runService.startChatRun({
+    conversationId,
+    text: 'pesquisa longa que nao deve voltar',
+    timeoutMs: 10,
+    executor: ({ abortSignal }) => new Promise((_, reject) => {
+      abortSignal.addEventListener('abort', () => reject(new Error('abortado')));
+    }),
+  });
+  assert.equal(await timedOut.done, 'timed_out');
+
+  let observed: Array<{ content: unknown }> = [];
+  const next = runService.startChatRun({
+    conversationId,
+    text: 'apenas salve esta memoria',
+    executor: async ({ messages }) => {
+      observed = messages as Array<{ content: unknown }>;
+      return { text: 'salva', inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, toolCallCount: 0, finishReason: 'stop' };
+    },
+  });
+  assert.equal(await next.done, 'done');
+  assert.deepEqual(observed.map(message => message.content), ['apenas salve esta memoria']);
 });
 
 test('erro do turno vira failed e NUNCA é sobrescrito para done', async () => {

@@ -82,7 +82,7 @@ test('adiciona colunas de projeto às tabelas existentes', () => {
   const cols = (table: string) =>
     new Set((db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(r => r.name));
   const conv = cols('conversations');
-  for (const c of ['project_id', 'archived', 'pinned', 'created_by', 'last_run_status']) {
+  for (const c of ['project_id', 'archived', 'pinned', 'created_by', 'last_run_status', 'model_override', 'provider_override']) {
     assert.ok(conv.has(c), `conversations.${c} deveria existir`);
   }
   const msg = cols('messages');

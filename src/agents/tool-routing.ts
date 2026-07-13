@@ -14,7 +14,7 @@ const EXPLANATION_ONLY = /^\s*(?:como|por que|porque|qual|quais|o que|explique|m
 const DOMAIN_TOOLS: Array<{ domain: string; pattern: RegExp; tools: string[] }> = [
   {
     domain: 'files',
-    pattern: /\b(arquivo|pasta|diretorio|codigo|projeto|workspace|site|pagina|landing|html|css|javascript|typescript|readme)\b/i,
+    pattern: /\b(arquivos?|pastas?|diretorios?|codigo|projeto|workspace|site|pagina|landing|html|css|javascript|typescript|readme|catalog(?:o|ar|ue)|document(?:o|ar|ado|acao))\b/i,
     tools: ['listFiles', 'readFile', 'writeFile', 'appendFile', 'editFile', 'deleteFile', 'runCommand'],
   },
   {
@@ -29,12 +29,12 @@ const DOMAIN_TOOLS: Array<{ domain: string; pattern: RegExp; tools: string[] }> 
   },
   {
     domain: 'agents',
-    pattern: /\b(agente|worker|manager|equipe|time|subordinado|soul|perfil)\b/i,
+    pattern: /\b(agentes?|workers?|managers?|equipes?|times?|subordinados?|soul|perfil)\b/i,
     tools: ['listAgents', 'listSubordinates', 'listAgentProfiles', 'createAgent', 'configureAgent', 'seedAgentMemory', 'deleteAgent', 'sendMessage'],
   },
   {
     domain: 'delegation',
-    pattern: /\b(delegue|delegar|distribua|paralelo|tarefas?)\b/i,
+    pattern: /\b(delegue|delegar|distribua|espalhe|espalha|paralelo|tarefas?)\b/i,
     tools: ['listTasks', 'createTask', 'updateTaskStatus', 'delegateTask', 'delegateTasks', 'deleteTask', 'clearBoard'],
   },
   {
@@ -106,10 +106,13 @@ export function routeToolsForMessages(messages: ModelMessage[], tools: ToolSet):
   };
 }
 
-export function prepareToolStep(decision: ToolRoutingDecision) {
+export function prepareToolStep(
+  decision: ToolRoutingDecision,
+  firstStepChoice: 'required' | 'auto' = 'required',
+) {
   if (!decision.requiresTool) return undefined;
   return ({ stepNumber }: { stepNumber: number }) => ({
     activeTools: decision.activeTools,
-    toolChoice: stepNumber === 0 ? 'required' as const : 'auto' as const,
+    toolChoice: stepNumber === 0 ? firstStepChoice : 'auto' as const,
   });
 }

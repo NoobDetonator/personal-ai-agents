@@ -323,16 +323,20 @@ export function touchLastOpened(id: string): void {
  */
 export function buildProjectContext(
   projectId: string,
-  extra?: { conversationId?: string; runId?: string },
+  extra?: { conversationId?: string; runId?: string; model?: string | null; provider?: string | null; userMessage?: string },
 ): ProjectExecutionContext {
   const project = getProject(projectId);
   if (!project) throw new Error(`Projeto não encontrado: ${projectId}`);
   ensureProjectDirectories(project);
+  const settings = getProjectSettings(projectId);
   return {
     projectId: project.id,
     projectRoot: resolveProjectRoot(project),
     conversationId: extra?.conversationId,
     runId: extra?.runId,
+    model: extra?.model ?? settings?.default_model ?? undefined,
+    provider: extra?.provider ?? settings?.default_provider ?? undefined,
+    userMessage: extra?.userMessage,
   };
 }
 

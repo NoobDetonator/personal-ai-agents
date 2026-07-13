@@ -283,6 +283,32 @@ test('GET /api/analytics aceita filtro multiplo de projetos', async () => {
   assert.equal(multiple.json.kpis.tokens.current, 25);
 });
 
+test('GET /api/state usa telemetria real de delegacoes para modelo e tokens dos agentes', async () => {
+  const db = connection.getDb();
+  db.prepare(`INSERT INTO usage_events
+    (id, agent_id, model, kind, input_tokens, output_tokens, cached_tokens, project_id)
+    VALUES ('state-worker-usage', 'aria', 'deepseek-v4-pro', 'chat', 1234, 56, 1000, 'legacy')`).run();
+
+  const response = await api('GET', '/api/state');
+  assert.equal(response.status, 200);
+  const aria = response.json.agents.find((agent: any) => agent.id === 'aria');
+  assert.equal(aria.model, 'deepseek-v4-pro');
+  assert.equal(aria.provider, 'deepseek');
+  assert.equal(aria.modelSource, 'last_usage');
+  assert.ok(aria.tokens.input >= 1234);
+  assert.ok(aria.tokens.output >= 56);
+  assert.ok(response.json.tokensToday.input >= 1234);
+
+  const project = svc.createProject({ name: 'Estado por projeto' });
+  svc.updateProjectSettings(project.id, { default_model: 'deepseek-v4-pro', default_provider: 'deepseek' });
+  const scoped = await api('GET', `/api/state?project=${project.id}`);
+  const scopedAria = scoped.json.agents.find((agent: any) => agent.id === 'aria');
+  assert.equal(scopedAria.model, 'deepseek-v4-pro');
+  assert.equal(scopedAria.modelSource, 'project');
+  assert.deepEqual(scopedAria.tokens, { input: 0, output: 0 });
+  assert.equal(scoped.json.config.model, 'deepseek-v4-pro');
+});
+
 test('API de dados gerencia memoria, export, settings, diagnostico e auditoria', async () => {
   const project = svc.createProject({ name: 'Dados HTTP' });
   const root = svc.resolveProjectRoot(project);

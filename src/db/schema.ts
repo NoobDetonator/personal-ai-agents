@@ -432,6 +432,8 @@ function runProjectMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'conversations', 'pinned', 'pinned INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'conversations', 'created_by', 'created_by TEXT');
   addColumnIfMissing(db, 'conversations', 'last_run_status', 'last_run_status TEXT');
+  addColumnIfMissing(db, 'conversations', 'model_override', 'model_override TEXT');
+  addColumnIfMissing(db, 'conversations', 'provider_override', 'provider_override TEXT');
 
   addColumnIfMissing(db, 'messages', 'run_id', 'run_id TEXT');
   addColumnIfMissing(db, 'messages', 'metadata_json', 'metadata_json TEXT');

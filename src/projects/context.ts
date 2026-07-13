@@ -17,6 +17,11 @@ export interface ProjectExecutionContext {
   projectRoot: string;
   conversationId?: string;
   runId?: string;
+  /** Modelo efetivo herdado do projeto ou sobrescrito pela conversa. */
+  model?: string;
+  provider?: string;
+  /** Mensagem humana que iniciou o turno atual; usada para preservar fatos ditados literalmente. */
+  userMessage?: string;
 }
 
 const storage = new AsyncLocalStorage<ProjectExecutionContext>();

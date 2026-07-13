@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist/src/index.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -14,8 +14,12 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "clean": "rimraf dist",
+    "check": "npm run lint && npm run check:web && npm run typecheck && npm test",
+    "lint": "eslint src scripts web/login.js web/charts.js web/agent-icons.js web/sw.js && node scripts/lint-dashboard.mjs",
+    "check:web": "node scripts/check-dashboard.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "test:e2e": "playwright test",
     "eval:prompts": "npm run build && node scripts/prompt-eval.mjs",
     "db:reset": "rimraf data/agents.db"
   },
@@ -42,10 +46,15 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.61.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.4.0",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
     "rimraf": "^6.1.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.63.0"
   }
 }

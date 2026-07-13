@@ -17,6 +17,27 @@ import { validateSoulText } from '../agents/prompt-composer.js';
 import { askConfirmation } from '../chat/confirm.js';
 import { recordMemoryFeedback, searchProjectVault } from '../memory/vault-service.js';
 
+function normalizeLiteralCandidate(value: string): string {
+  return value
+    .trim()
+    .replace(/^[`*_>'"“”‘’\s]+|[`*_<'"“”‘’\s]+$/gu, '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .normalize('NFC')
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('pt-BR');
+}
+
+/** Retorna sempre o texto humano original, nunca a versao reescrita pelo modelo. */
+export function matchUserLiteral(userText: string, proposed: string): string | null {
+  const trimmed = proposed.trim();
+  if (trimmed && userText.includes(trimmed)) return trimmed;
+  const normalized = normalizeLiteralCandidate(trimmed);
+  if (!normalized) return null;
+  const quoted = [...userText.matchAll(/["“]([^"”]{3,})["”]/gu)].map(match => match[1].trim());
+  return quoted.find(candidate => normalizeLiteralCandidate(candidate) === normalized) ?? null;
+}
+
 export function createMemoryTools(agentId: string) {
   const readMemoryTool = tool({
     description: 'Ler seu arquivo de memoria para lembrar de informacoes passadas',
@@ -132,7 +153,7 @@ export function createMemoryTools(agentId: string) {
 
   const saveDeepMemoryTool = tool({
     description:
-      'Salvar uma MEMORIA PROFUNDA: conteudo extenso (procedimento, contexto de projeto, aprendizado detalhado) que sera recuperado automaticamente quando relevante. Para fatos curtos sobre o usuario, use saveMemory.',
+      'Salvar uma MEMORIA PROFUNDA. Quando o usuario ditar uma regra, preferencia ou convencao neste turno, use sourceType="user" e copie somente o trecho literal em verbatimExcerpt; o backend preservara esse texto sem acrescentar inferencias. Conteudo sintetizado pelo agente deve usar outra origem.',
     inputSchema: z.object({
       slug: z.string().describe('Identificador kebab-case (ex: "projeto-analyzai-contexto")'),
       description: z.string().describe('Uma frase dizendo o que contem e quando e util (usada para decidir a recuperacao)'),
@@ -142,8 +163,10 @@ export function createMemoryTools(agentId: string) {
       status: z.enum(['active', 'tentative']).optional()
         .describe('Use tentative quando o conteudo ainda nao foi confirmado'),
       confidence: z.number().min(0).max(1).optional(),
-      sourceType: z.enum(['agent', 'observation', 'tool_result', 'imported']).optional()
-        .describe('Origem observada pelo agente; a proveniencia user e reservada a entradas humanas'),
+      sourceType: z.enum(['user', 'agent', 'observation', 'tool_result', 'imported']).optional()
+        .describe('Use user exclusivamente para conteudo ditado diretamente na mensagem humana atual'),
+      verbatimExcerpt: z.string().optional()
+        .describe('Trecho literal da mensagem atual. Obrigatorio quando sourceType=user; vira o conteudo canonico sem expansoes.'),
       tags: z.array(z.string()).max(12).optional(),
       aliases: z.array(z.string()).max(8).optional(),
       links: z.array(z.string()).max(20).optional()
@@ -151,9 +174,22 @@ export function createMemoryTools(agentId: string) {
       implementedBy: z.array(z.string()).max(20).optional()
         .describe('Caminhos relativos de arquivos que implementam esta memoria ou decisao'),
     }),
-    execute: async ({ slug, description, content, noteType, status, confidence, sourceType, tags, aliases, links, implementedBy }) => {
+    execute: async ({ slug, description, content, noteType, status, confidence, sourceType, verbatimExcerpt, tags, aliases, links, implementedBy }) => {
       try {
-        const saved = saveScopedDeepMemory(agentId, slug, description, content, {
+        const currentUserText = getProjectContext()?.userMessage ?? '';
+        const directMemoryRequest = /\b(salv|guard|registr|lembr|mem[oó]ria)\w*/iu.test(currentUserText);
+        if (directMemoryRequest && sourceType !== 'user') {
+          return { error: 'Esta memoria foi ditada pelo usuario. Tente novamente com sourceType="user" e verbatimExcerpt copiado literalmente da mensagem atual.' };
+        }
+        let canonicalContent = content;
+        if (sourceType === 'user') {
+          const excerpt = verbatimExcerpt ? matchUserLiteral(currentUserText, verbatimExcerpt) : null;
+          if (!excerpt) {
+            return { error: 'verbatimExcerpt deve ser um trecho literal e completo da mensagem humana atual.' };
+          }
+          canonicalContent = excerpt;
+        }
+        const saved = saveScopedDeepMemory(agentId, slug, description, canonicalContent, {
           noteType, status, confidence, sourceType, tags, aliases, links, implementedBy,
         });
         return { success: true, slug: saved };

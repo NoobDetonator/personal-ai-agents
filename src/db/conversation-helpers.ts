@@ -5,6 +5,7 @@ import type { ModelMessage } from 'ai';
 interface DbMessage {
   role: string;
   content: string;
+  status: string | null;
 }
 
 export function getOrCreateConversation(agentId: string): string {
@@ -97,15 +98,31 @@ export function findConversationByPrefix(idPrefix: string): ConversationSummary 
   }
 }
 
-export function loadConversationById(conversationId: string, maxMessages: number): ModelMessage[] {
+export function loadConversationById(
+  conversationId: string,
+  maxMessages: number,
+  options: { afterLastTerminal?: boolean } = {},
+): ModelMessage[] {
   try {
     const db = getDb();
     const rows = db.prepare(
-      `SELECT role, content FROM messages
+      `SELECT role, content, status FROM messages
        WHERE conversation_id = ? ORDER BY created_at ASC`
     ).all(conversationId) as DbMessage[];
 
-    const messages: ModelMessage[] = rows
+    const terminalStatuses = new Set(['failed', 'cancelled', 'timed_out']);
+    let lastTerminal = -1;
+    if (options.afterLastTerminal) {
+      for (let index = rows.length - 1; index >= 0; index--) {
+        if (rows[index].role === 'assistant' && terminalStatuses.has(rows[index].status ?? '')) {
+          lastTerminal = index;
+          break;
+        }
+      }
+    }
+    const activeRows = lastTerminal >= 0 ? rows.slice(lastTerminal + 1) : rows;
+
+    const messages: ModelMessage[] = activeRows
       .slice(-maxMessages)
       .filter(r => r.role === 'user' || r.role === 'assistant')
       .map(r => ({ role: r.role as 'user' | 'assistant', content: r.content }));
@@ -123,14 +140,30 @@ export function loadConversationById(conversationId: string, maxMessages: number
 export function forkConversation(conversationId: string): string | null {
   try {
     const db = getDb();
-    const original = db.prepare('SELECT agent_id, type, title, project_id FROM conversations WHERE id = ?')
-      .get(conversationId) as { agent_id: string; type: string; title: string | null; project_id: string | null } | undefined;
+    const original = db.prepare('SELECT agent_id, type, title, project_id, model_override, provider_override FROM conversations WHERE id = ?')
+      .get(conversationId) as {
+        agent_id: string;
+        type: string;
+        title: string | null;
+        project_id: string | null;
+        model_override: string | null;
+        provider_override: string | null;
+      } | undefined;
     if (!original) return null;
 
     const newId = randomUUID();
     db.prepare(
-      `INSERT INTO conversations (id, agent_id, type, title, project_id) VALUES (?, ?, ?, ?, ?)`
-    ).run(newId, original.agent_id, original.type, `Fork de ${original.title ?? conversationId.slice(0, 8)}`, original.project_id);
+      `INSERT INTO conversations (id, agent_id, type, title, project_id, model_override, provider_override)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      newId,
+      original.agent_id,
+      original.type,
+      `Fork de ${original.title ?? conversationId.slice(0, 8)}`,
+      original.project_id,
+      original.model_override,
+      original.provider_override,
+    );
 
     const messages = db.prepare(
       `SELECT role, content, agent_id, tool_calls, input_tokens, output_tokens, created_at

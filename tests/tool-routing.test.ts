@@ -5,7 +5,7 @@ import { prepareToolStep, routeToolsForMessages } from '../src/agents/tool-routi
 
 const tools = Object.fromEntries([
   'readFile', 'writeFile', 'editFile', 'runCommand', 'webSearch', 'readWebPage',
-  'createAgent', 'listAgentProfiles', 'listSkills', 'useSkill',
+  'createAgent', 'listAgentProfiles', 'listSkills', 'useSkill', 'createTask', 'delegateTasks',
 ].map(name => [name, {}])) as ToolSet;
 
 function user(content: string): ModelMessage[] {
@@ -35,5 +35,25 @@ test('primeiro passo exige tool e os seguintes voltam para auto', () => {
   const prepare = prepareToolStep({ requiresTool: true, activeTools: ['writeFile'], matchedDomains: ['files'], requiredEffects: ['write'] });
   assert.ok(prepare);
   assert.equal(prepare({ stepNumber: 0 }).toolChoice, 'required');
+  assert.equal(prepare({ stepNumber: 1 }).toolChoice, 'auto');
+});
+
+test('pedido em linguagem natural com agentes no plural inclui criacao, delegacao, web e arquivos', () => {
+  const decision = routeToolsForMessages(user(
+    'Crie alguns agentes especializados, espalha agentes pela internet e guarde tudo catalogado e documentado.',
+  ), tools);
+  assert.equal(decision.activeTools.includes('createAgent'), true);
+  assert.equal(decision.activeTools.includes('delegateTasks'), true);
+  assert.equal(decision.activeTools.includes('webSearch'), true);
+  assert.equal(decision.activeTools.includes('writeFile'), true);
+});
+
+test('provedor com thinking pode manter tool choice automatico desde o primeiro passo', () => {
+  const prepare = prepareToolStep(
+    { requiresTool: true, activeTools: ['writeFile'], matchedDomains: ['files'], requiredEffects: ['write'] },
+    'auto',
+  );
+  assert.ok(prepare);
+  assert.equal(prepare({ stepNumber: 0 }).toolChoice, 'auto');
   assert.equal(prepare({ stepNumber: 1 }).toolChoice, 'auto');
 });

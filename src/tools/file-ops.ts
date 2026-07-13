@@ -42,6 +42,17 @@ function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
+/**
+ * Em projetos, a raiz ja e a pasta de arquivos. Prefixos herdados da CLI
+ * (workspace/ e files/) nao devem criar uma segunda raiz acidental.
+ */
+export function normalizeProjectPath(filePath: string): string {
+  if (!getProjectContext() || path.isAbsolute(filePath)) return filePath;
+  const normalized = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  const match = normalized.match(/^(?:workspace|files)(?:\/(.*))?$/i);
+  return match ? (match[1] || '.') : filePath;
+}
+
 function resolveWithinRoots(filePath: string, extraRoots: string[]): string | null {
   const config = getConfig();
 
@@ -51,7 +62,8 @@ function resolveWithinRoots(filePath: string, extraRoots: string[]): string | nu
   // comportamento global baseado em config.fileOps.allowedPaths e no cwd.
   const ctx = getProjectContext();
   const base = ctx ? ctx.projectRoot : process.cwd();
-  const lexical = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(base, filePath);
+  const normalizedPath = normalizeProjectPath(filePath);
+  const lexical = path.isAbsolute(normalizedPath) ? path.resolve(normalizedPath) : path.resolve(base, normalizedPath);
 
   try {
     if (fs.existsSync(lexical) && fs.lstatSync(lexical).isSymbolicLink()) return null;
@@ -148,7 +160,7 @@ export const readFileTool = tool({
 });
 
 export const writeFileTool = tool({
-  description: 'Criar ou sobrescrever um arquivo com conteudo',
+  description: 'Criar ou sobrescrever um arquivo. Em projetos, use caminho relativo a raiz (ex: dnd/regras.md); nao prefixe com workspace/ ou files/.',
   inputSchema: z.object({
     path: z.string().describe('Caminho do arquivo'),
     content: z.string().describe('Conteudo a ser escrito'),
@@ -264,9 +276,9 @@ export const deleteFileTool = tool({
 });
 
 export const listFilesTool = tool({
-  description: 'Listar arquivos e pastas em um diretorio',
+  description: 'Listar arquivos e pastas. Em projetos, "." e a raiz; nao prefixe com workspace/ ou files/.',
   inputSchema: z.object({
-    path: z.string().describe('Caminho do diretorio').default('workspace'),
+    path: z.string().describe('Caminho do diretorio relativo a raiz do projeto').default('.'),
   }),
   execute: async ({ path: dirPath }) => {
     const resolved = resolveReadablePath(dirPath);

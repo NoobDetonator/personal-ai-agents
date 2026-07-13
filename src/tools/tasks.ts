@@ -8,6 +8,7 @@ import * as renderer from '../chat/renderer.js';
 import { emitBus } from '../web/bus.js';
 import { askConfirmation } from '../chat/confirm.js';
 import { getProjectContext } from '../projects/context.js';
+import { getProjectSettings } from '../projects/service.js';
 
 export interface TaskRow {
   id: string;
@@ -114,6 +115,7 @@ async function delegateToAgent(
   prompt: string,
   taskId: string | undefined,
   createdBy: string,
+  parentSignal?: AbortSignal,
 ): Promise<{ agentId: string; taskId?: string; response?: string; error?: string }> {
   const target = getAgent(agentId);
   if (!target) {
@@ -149,12 +151,19 @@ async function delegateToAgent(
     controller: new AbortController(),
     projectId,
   };
+  let parentAborted = false;
+  const abortFromParent = () => {
+    parentAborted = true;
+    delegation.controller.abort(parentSignal?.reason);
+  };
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
   activeDelegations.set(delegation.id, delegation);
   emitBus('delegation', { id: delegation.id, from: createdBy, to: agentId, taskId: boardTaskId, agentName: target.name, status: 'start' });
 
   renderer.renderSystemMessage(`→ delegando para ${target.name} [${boardTaskId}]...`);
 
-  const timeoutSec = config.delegation.timeoutSec;
+  const timeoutSec = getProjectSettings(projectId)?.delegation_timeout_sec ?? config.delegation.timeoutSec;
   const timer = setTimeout(() => {
     delegation.timedOut = true;
     delegation.controller.abort();
@@ -184,6 +193,11 @@ async function delegateToAgent(
     emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'done' });
     return { agentId, taskId: boardTaskId, response };
   } catch (error) {
+    if (delegation.controller.signal.aborted && parentAborted) {
+      setTaskStatus(boardTaskId, 'cancelled', 'Cancelada porque o turno principal foi encerrado', projectId);
+      emitBus('delegation', { id: delegation.id, to: agentId, agentName: target.name, taskId: boardTaskId, status: 'cancelled' });
+      throw error;
+    }
     if (delegation.controller.signal.aborted && delegation.cancelled) {
       setTaskStatus(boardTaskId, 'cancelled', 'Cancelada pelo usuario via painel', projectId);
       renderer.renderSystemMessage(`⊘ Delegacao para ${target.name} cancelada pelo usuario [${boardTaskId}].`);
@@ -209,6 +223,7 @@ async function delegateToAgent(
     return { agentId, taskId: boardTaskId, error: msg };
   } finally {
     clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', abortFromParent);
     activeDelegations.delete(delegation.id);
   }
 }
@@ -300,8 +315,8 @@ export function createTaskTools(agentId: string): ToolSet {
       prompt: z.string().describe('Instrucao completa da tarefa'),
       taskId: z.string().optional().describe('ID da tarefa do board associada (recomendado)'),
     }),
-    execute: async ({ agentId: targetId, prompt, taskId }) => {
-      return await delegateToAgent(targetId, prompt, taskId, agentId);
+    execute: async ({ agentId: targetId, prompt, taskId }, options) => {
+      return await delegateToAgent(targetId, prompt, taskId, agentId, options.abortSignal);
     },
   });
 
@@ -405,11 +420,14 @@ export function createTaskTools(agentId: string): ToolSet {
         .max(10)
         .describe('Lista de delegacoes a executar em paralelo'),
     }),
-    execute: async ({ delegations }) => {
+    execute: async ({ delegations }, options) => {
       const results = await runWithConcurrency(
         delegations,
-        getConfig().delegation.concurrency,
-        d => delegateToAgent(d.agentId, d.prompt, d.taskId, agentId),
+        getProjectSettings(getProjectContext()?.projectId ?? 'legacy')?.max_concurrency ?? getConfig().delegation.concurrency,
+        d => {
+          if (options.abortSignal?.aborted) throw options.abortSignal.reason ?? new Error('Turno principal encerrado.');
+          return delegateToAgent(d.agentId, d.prompt, d.taskId, agentId, options.abortSignal);
+        },
       );
       return { results };
     },

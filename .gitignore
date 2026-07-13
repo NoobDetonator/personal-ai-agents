@@ -38,6 +38,8 @@ temp/
 *.temp
 *.log
 .DS_Store
+test-results/
+playwright-report/
 
 # Instalações locais de ferramentas e skills de terceiros
 .agents/

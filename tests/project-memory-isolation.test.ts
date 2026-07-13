@@ -9,6 +9,7 @@ let projects: typeof import('../src/projects/service.js');
 let context: typeof import('../src/projects/context.js');
 let memory: typeof import('../src/projects/agent-memory.js');
 let usage: typeof import('../src/agents/usage.js');
+let memoryTools: typeof import('../src/tools/memory-ops.js');
 
 before(async () => {
   process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'paa-scoped-memory-')));
@@ -17,10 +18,43 @@ before(async () => {
   context = await import('../src/projects/context.js');
   memory = await import('../src/projects/agent-memory.js');
   usage = await import('../src/agents/usage.js');
+  memoryTools = await import('../src/tools/memory-ops.js');
   connection.initDatabase();
 });
 
 after(() => connection.closeDatabase());
+
+test('memoria ditada pelo usuario preserva somente o trecho literal', async () => {
+  const project = projects.createProject({ name: 'Memoria literal' });
+  const instruction = 'todo documento de D&D deve ficar na pasta raiz dnd/ e citar fontes primarias';
+  const ctx = {
+    ...projects.buildProjectContext(project.id),
+    userMessage: `Salve na memoria esta convencao: ${instruction}. Confirme depois.`,
+  };
+  const tools = memoryTools.createMemoryTools('aria') as any;
+
+  await context.runWithProjectContext(ctx, async () => {
+    const rejected = await tools.saveDeepMemory.execute({
+      slug: 'convencao-invalida', description: 'teste', content: `${instruction}\n- Regra inventada`, sourceType: 'agent',
+    }, { toolCallId: '1', messages: [] });
+    assert.match(rejected.error, /ditada pelo usuario/);
+
+    const saved = await tools.saveDeepMemory.execute({
+      slug: 'convencao', description: 'teste', content: `${instruction}\n- Regra inventada`,
+      sourceType: 'user', verbatimExcerpt: instruction,
+    }, { toolCallId: '2', messages: [] });
+    assert.equal(saved.success, true);
+    const stored = memory.readScopedDeepMemory('aria', 'convencao') ?? '';
+    assert.match(stored, /todo documento de D&D deve ficar/);
+    assert.doesNotMatch(stored, /Regra inventada/);
+  });
+});
+
+test('comparacao literal tolera apenas formatacao e acentos, mas devolve o texto humano original', () => {
+  const human = 'Salve exatamente: “Convenção válida com revisão.”';
+  assert.equal(memoryTools.matchUserLiteral(human, '**convencao valida com revisao.**'), 'Convenção válida com revisão.');
+  assert.equal(memoryTools.matchUserLiteral(human, 'Convenção válida com uma regra extra.'), null);
+});
 
 test('memorias e uso ficam isolados por projeto', () => {
   const a = projects.createProject({ name: 'Memoria A' });

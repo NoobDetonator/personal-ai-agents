@@ -75,7 +75,6 @@ function terminateProcessTree(
 
   return new Promise(resolve => {
     let settled = false;
-    let fallback: NodeJS.Timeout | undefined;
     let stderr = '';
     const finish = (error: string | null) => {
       if (settled) return;
@@ -90,6 +89,10 @@ function terminateProcessTree(
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
+    const fallback = setTimeout(() => {
+      child.kill();
+      finish('taskkill /T nao respondeu em 1 segundo; somente o shell direto foi encerrado.');
+    }, 1000);
     killer.stderr.on('data', data => { stderr += String(data); });
     killer.once('close', code => {
       if (code === 0) {
@@ -103,10 +106,6 @@ function terminateProcessTree(
       child.kill();
       finish(`Nao foi possivel iniciar taskkill /T: ${error.message}`);
     });
-    fallback = setTimeout(() => {
-      child.kill();
-      finish('taskkill /T nao respondeu em 1 segundo; somente o shell direto foi encerrado.');
-    }, 1000);
   });
 }
 
@@ -119,9 +118,12 @@ export function runShell(command: string, cwd: string, timeoutSec: number): Prom
 }> {
   return new Promise(resolve => {
     const isWin = process.platform === 'win32';
+    // PowerShell pode recusar o alias 8.3 de pastas temporarias no Windows.
+    // Normalize para o caminho fisico longo antes de iniciar o processo.
+    const shellCwd = fs.existsSync(cwd) ? fs.realpathSync.native(cwd) : cwd;
     const child = isWin
-      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd, windowsHide: true })
-      : spawn('/bin/sh', ['-c', command], { cwd, detached: true });
+      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd: shellCwd, windowsHide: true })
+      : spawn('/bin/sh', ['-c', command], { cwd: shellCwd, detached: true });
 
     let stdout = '';
     let stderr = '';

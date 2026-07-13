@@ -17,6 +17,15 @@ export interface ProjectConversation {
   last_run_status: string | null;
   updated_at: string;
   message_count: number;
+  model_override: string | null;
+  provider_override: string | null;
+}
+
+export interface ConversationContext {
+  projectId: string;
+  agentId: string;
+  modelOverride: string | null;
+  providerOverride: string | null;
 }
 
 export function createProjectConversation(
@@ -44,6 +53,7 @@ export function listProjectConversations(
   const archivedClause = opts?.includeArchived ? '' : 'AND c.archived = 0';
   return db.prepare(
     `SELECT c.id, c.project_id, c.agent_id, c.type, c.title, c.archived, c.pinned,
+            c.model_override, c.provider_override,
             c.last_run_status, c.updated_at,
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
      FROM conversations c
@@ -53,17 +63,33 @@ export function listProjectConversations(
 }
 
 /** Projeto e agente de uma conversa. project_id ausente cai no Legacy. */
-export function getConversationContext(conversationId: string): { projectId: string; agentId: string } | null {
+export function getConversationContext(conversationId: string): ConversationContext | null {
   const row = getDb().prepare(
-    'SELECT project_id, agent_id FROM conversations WHERE id = ?',
-  ).get(conversationId) as { project_id: string | null; agent_id: string } | undefined;
+    'SELECT project_id, agent_id, model_override, provider_override FROM conversations WHERE id = ?',
+  ).get(conversationId) as {
+    project_id: string | null;
+    agent_id: string;
+    model_override: string | null;
+    provider_override: string | null;
+  } | undefined;
   if (!row) return null;
-  return { projectId: row.project_id ?? LEGACY_PROJECT_ID, agentId: row.agent_id };
+  return {
+    projectId: row.project_id ?? LEGACY_PROJECT_ID,
+    agentId: row.agent_id,
+    modelOverride: row.model_override,
+    providerOverride: row.provider_override,
+  };
 }
 
 export function patchConversation(
   conversationId: string,
-  patch: { title?: string; pinned?: boolean; archived?: boolean },
+  patch: {
+    title?: string;
+    pinned?: boolean;
+    archived?: boolean;
+    modelOverride?: string | null;
+    providerOverride?: string | null;
+  },
 ): boolean {
   const db = getDb();
   const sets: string[] = [];
@@ -71,6 +97,8 @@ export function patchConversation(
   if (patch.title !== undefined) { sets.push('title = ?'); values.push(patch.title); }
   if (patch.pinned !== undefined) { sets.push('pinned = ?'); values.push(patch.pinned ? 1 : 0); }
   if (patch.archived !== undefined) { sets.push('archived = ?'); values.push(patch.archived ? 1 : 0); }
+  if (patch.modelOverride !== undefined) { sets.push('model_override = ?'); values.push(patch.modelOverride); }
+  if (patch.providerOverride !== undefined) { sets.push('provider_override = ?'); values.push(patch.providerOverride); }
   if (sets.length === 0) return false;
   values.push(conversationId);
   const info = db.prepare(`UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`).run(...values);

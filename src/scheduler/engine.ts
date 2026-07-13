@@ -80,7 +80,7 @@ export function refreshScheduler(): void {
 }
 
 export function stopScheduler(): void {
-  for (const [id, task] of activeTasks) {
+  for (const task of activeTasks.values()) {
     task.stop();
   }
   activeTasks.clear();

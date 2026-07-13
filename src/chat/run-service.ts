@@ -14,7 +14,7 @@ import {
   getConversationContext,
   saveRunMessage,
 } from '../projects/conversation-service.js';
-import { buildProjectContext } from '../projects/service.js';
+import { buildProjectContext, getProjectSettings } from '../projects/service.js';
 import { runWithProjectContext } from '../projects/context.js';
 import { emitBus } from '../web/bus.js';
 import { rejectConfirmationsForRun } from './confirm.js';
@@ -139,19 +139,20 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
   });
 
   const executor = input.executor ?? executorOverride ?? defaultExecutor;
-  const timeoutMs = input.timeoutMs ?? getConfig().delegation.timeoutSec * 1000;
-  const done = executeRun(runId, ctx.projectId, ctx.agentId, input.conversationId, executor, timeoutMs);
+  const timeoutMs = input.timeoutMs
+    ?? (getProjectSettings(ctx.projectId)?.delegation_timeout_sec ?? getConfig().delegation.timeoutSec) * 1000;
+  const done = executeRun(runId, ctx, input.conversationId, executor, timeoutMs);
   return { runId, done };
 }
 
 async function executeRun(
   runId: string,
-  projectId: string,
-  agentId: string,
+  conversationContext: NonNullable<ReturnType<typeof getConversationContext>>,
   conversationId: string,
   executor: TurnExecutor,
   timeoutMs: number,
 ): Promise<RunStatus | null> {
+  const { projectId, agentId, modelOverride, providerOverride } = conversationContext;
   const controller = new AbortController();
   activeRuns.set(runId, controller);
 
@@ -163,9 +164,15 @@ async function executeRun(
   }, timeoutMs);
 
   try {
-    const projectCtx = buildProjectContext(projectId, { conversationId, runId });
+    const projectCtx = buildProjectContext(projectId, {
+      conversationId,
+      runId,
+      model: modelOverride,
+      provider: providerOverride,
+      userMessage: String([...loadConversationById(conversationId, 1)].at(-1)?.content ?? ''),
+    });
     const maxHistory = getConfig().display.maxHistoryMessages;
-    const messages = loadConversationById(conversationId, maxHistory);
+    const messages = loadConversationById(conversationId, maxHistory, { afterLastTerminal: true });
 
     const handlers: TurnHandlers = {
       onTextDelta: (text) => {

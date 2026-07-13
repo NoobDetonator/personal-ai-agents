@@ -285,7 +285,8 @@ export function deleteProjectPath(
   if (kind === 'directory' && fs.readdirSync(target.absolute).length > 0) {
     throw new ProjectFileError(409, 'A pasta precisa estar vazia para ser excluida.');
   }
-  kind === 'directory' ? fs.rmdirSync(target.absolute) : fs.unlinkSync(target.absolute);
+  if (kind === 'directory') fs.rmdirSync(target.absolute);
+  else fs.unlinkSync(target.absolute);
   return { path: target.relative, kind };
 }
 

@@ -13,6 +13,7 @@ let root: string;
 let ws: string;
 let outside: string;
 let skillsDir: string;
+let runWithProjectContext: typeof import('../src/projects/context.js').runWithProjectContext;
 
 before(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'paa-fileops-'));
@@ -29,6 +30,7 @@ before(async () => {
   fs.writeFileSync(path.join(skillsDir, 'demo', 'SKILL.md'), '---\nname: demo\n---\ncorpo');
   fs.writeFileSync(path.join(skillsDir, 'demo', 'perfil.md'), 'perfil auxiliar');
   ({ resolveAllowedPath, resolveReadablePath } = await import('../src/tools/file-ops.js'));
+  ({ runWithProjectContext } = await import('../src/projects/context.js'));
 });
 
 test('permite arquivo dentro do workspace', () => {
@@ -37,6 +39,16 @@ test('permite arquivo dentro do workspace', () => {
 
 test('permite arquivo novo em subpasta inexistente do workspace', () => {
   assert.ok(resolveAllowedPath(path.join(ws, 'nova', 'sub', 'a.txt')));
+});
+
+test('em projeto, prefixos workspace/ e files/ apontam para a raiz sem criar pasta duplicada', () => {
+  const ctx = { projectId: 'teste', projectRoot: ws };
+  runWithProjectContext(ctx, () => {
+    assert.match(resolveAllowedPath('workspace/dnd/regras.md') ?? '', /[\\/]workspace[\\/]dnd[\\/]regras\.md$/i);
+    assert.match(resolveAllowedPath('files/dnd/itens.md') ?? '', /[\\/]workspace[\\/]dnd[\\/]itens\.md$/i);
+    assert.doesNotMatch(resolveAllowedPath('workspace/dnd/regras.md') ?? '', /[\\/]workspace[\\/]workspace[\\/]/i);
+    assert.match(resolveReadablePath('workspace') ?? '', /[\\/]workspace$/i);
+  });
 });
 
 test('nega traversal com ..', () => {

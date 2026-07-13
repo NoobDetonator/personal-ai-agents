@@ -1,10 +1,14 @@
 # Personal AI Agents 3.0
 
-Uma assistente de IA pessoal para terminal, com painel web local e suporte a equipes de agentes. Uma instalação nova começa somente com a **Aria**; os demais agentes são criados durante o uso.
+Um ambiente local para executar projetos com uma assistente de IA que mantém contexto, memória e arquivos separados por projeto. A **Aria** coordena o trabalho e pode criar agentes especializados quando a tarefa exigir, enquanto você acompanha e controla tudo pelo painel web ou pelo terminal.
+
+O foco do produto é transformar conversas com IA em trabalho persistente e auditável sem enviar seu workspace para uma plataforma de terceiros. Board, memória, arquivos, automações e equipes de agentes existem para apoiar esse fluxo — não como produtos separados.
+
+Uma instalação nova começa somente com a Aria; os demais agentes são criados durante o uso.
 
 ## Requisitos
 
-- Node.js 20 ou superior
+- Node.js 20.9 ou superior
 - Uma chave de API compatível em `.env` (veja `.env.example`)
 
 ## Primeiros passos
@@ -30,15 +34,20 @@ Requisições com Host ou Origin externos são recusadas. A API também limita c
 ## Validação
 
 ```bash
+npm run lint
+npm run check:web
 npm run typecheck
 npm run build
 npm test
+npm run test:e2e
 node scripts/e2e-driver.mjs <passos.json>
 npm run eval:prompts -- --dry-run
 npm run eval:prompts
 ```
 
-`npm test` roda a suíte de invariantes de segurança em `tests/` (validação de caminhos e symlinks nas operações de arquivo, bloqueio de SSRF na leitura web, allowlist do shell e carregamento confiável de configuração). A mesma suíte roda no CI (GitHub Actions, Linux e Windows) a cada push. O driver E2E é executado com um arquivo de passos apropriado ao cenário.
+`npm test` roda a suíte de invariantes de segurança em `tests/` (validação de caminhos e symlinks nas operações de arquivo, bloqueio de SSRF na leitura web, allowlist do shell e carregamento confiável de configuração). `npm run test:e2e` abre o painel em um Chromium real e valida o fluxo autenticado de criação de projeto. O CI executa lint, checagens, build e testes em Linux e Windows, além do E2E de navegador no Linux.
+
+O driver `scripts/e2e-driver.mjs` continua disponível para cenários completos do terminal que dependem de uma chave de API e de um arquivo de passos.
 
 `eval:prompts -- --dry-run` valida o catalogo sem chamar API. Sem `--dry-run`, executa cenarios comportamentais com o provider configurado, consome tokens e retorna exit code 1 se algum criterio falhar.
 
