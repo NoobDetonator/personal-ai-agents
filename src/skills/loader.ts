@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { watch, type FSWatcher } from 'chokidar';
+import { createHash, randomUUID } from 'node:crypto';
 
 export interface SkillMeta {
   id: string;          // folder name (slug)
@@ -55,10 +56,10 @@ export function parseFrontmatter(content: string): { data: Record<string, string
 }
 
 function stripQuotes(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try { return JSON.parse(value) as string; } catch { return value.slice(1, -1); }
+  }
+  if (value.startsWith("'") && value.endsWith("'")) {
     return value.slice(1, -1);
   }
   return value;
@@ -139,31 +140,99 @@ export function readSkillContent(idOrName: string): SkillContent | undefined {
   return { meta, content, files };
 }
 
-export function createSkillFiles(id: string, name: string, description: string, instructions: string): SkillMeta {
-  const slug = id.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
-  if (!slug) {
-    throw new Error('Nome de skill invalido.');
-  }
-  if (skills.has(slug)) {
-    throw new Error(`Skill "${slug}" ja existe. Use updateSkill para melhora-la.`);
-  }
+export interface SkillDraft {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  content: string;
+  sha256: string;
+}
 
-  const dir = path.join(SKILLS_DIR, slug);
-  fs.mkdirSync(dir, { recursive: true });
+function validateSingleLine(value: string, label: string, min: number, max: number): string {
+  const normalized = value.trim();
+  if (normalized.length < min || normalized.length > max) {
+    throw new Error(`${label} deve ter entre ${min} e ${max} caracteres.`);
+  }
+  if (/[\r\n\0]/.test(normalized) || /[\u0001-\u0008\u000b\u000c\u000e-\u001f]/.test(normalized)) {
+    throw new Error(`${label} deve ocupar uma unica linha e nao pode conter caracteres de controle.`);
+  }
+  return normalized;
+}
 
+function validateInstructions(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length < 40 || normalized.length > 20_000) {
+    throw new Error('As instrucoes da skill devem ter entre 40 e 20000 caracteres.');
+  }
+  if (/\0/.test(normalized)) throw new Error('As instrucoes contem caractere nulo invalido.');
+  return normalized;
+}
+
+export function buildSkillDraft(id: string, name: string, description: string, instructions: string): SkillDraft {
+  const slug = id.toLowerCase().trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    throw new Error('ID de skill invalido. Use apenas kebab-case (ex: revisar-release).');
+  }
+  const safeName = validateSingleLine(name || slug, 'Nome', 2, 80);
+  const safeDescription = validateSingleLine(description, 'Descricao', 8, 240);
+  const safeInstructions = validateInstructions(instructions);
   const content = [
     '---',
-    `name: ${name || slug}`,
-    `description: ${description}`,
+    `name: ${JSON.stringify(safeName)}`,
+    `description: ${JSON.stringify(safeDescription)}`,
     '---',
     '',
-    instructions.trim(),
+    safeInstructions,
     '',
   ].join('\n');
+  return {
+    id: slug,
+    name: safeName,
+    description: safeDescription,
+    instructions: safeInstructions,
+    content,
+    sha256: createHash('sha256').update(content).digest('hex'),
+  };
+}
 
-  fs.writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf-8');
+function atomicWriteFile(filePath: string, content: string): void {
+  const tmp = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${randomUUID()}.tmp`);
+  try {
+    fs.writeFileSync(tmp, content, { encoding: 'utf-8', flag: 'wx' });
+    fs.renameSync(tmp, filePath);
+  } finally {
+    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+  }
+}
+
+function archiveSkillVersion(meta: SkillMeta, content: string): string {
+  const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const versionDir = path.join(process.cwd(), 'data', 'skill-versions', meta.id);
+  fs.mkdirSync(versionDir, { recursive: true });
+  const versionPath = path.join(versionDir, `${stamp}-${hash}.md`);
+  atomicWriteFile(versionPath, content);
+  return versionPath;
+}
+
+export function createSkillFiles(id: string, name: string, description: string, instructions: string): SkillMeta {
+  const draft = buildSkillDraft(id, name, description, instructions);
+  if (skills.has(draft.id)) {
+    throw new Error(`Skill "${draft.id}" ja existe. Use updateSkill para melhora-la.`);
+  }
+
+  const dir = path.join(SKILLS_DIR, draft.id);
+  if (fs.existsSync(dir)) throw new Error(`A pasta da skill "${draft.id}" ja existe e nao sera sobrescrita.`);
+  fs.mkdirSync(dir);
+  try {
+    atomicWriteFile(path.join(dir, 'SKILL.md'), draft.content);
+  } catch (error) {
+    try { fs.rmdirSync(dir); } catch { /* preserva evidencia se nao estiver vazia */ }
+    throw error;
+  }
   loadSkills();
-  return skills.get(slug)!;
+  return skills.get(draft.id)!;
 }
 
 export function updateSkillFiles(idOrName: string, updates: { description?: string; instructions?: string }): SkillMeta {
@@ -179,22 +248,15 @@ export function updateSkillFiles(idOrName: string, updates: { description?: stri
 
   const current = fs.readFileSync(meta.filePath, 'utf-8');
   const { data, body } = parseFrontmatter(current);
+  const draft = buildSkillDraft(
+    meta.id,
+    data.name || meta.id,
+    updates.description ?? data.description ?? '',
+    updates.instructions ?? body,
+  );
 
-  const name = data.name || meta.id;
-  const description = updates.description ?? data.description ?? '';
-  const instructions = updates.instructions ?? body;
-
-  const content = [
-    '---',
-    `name: ${name}`,
-    `description: ${description}`,
-    '---',
-    '',
-    instructions.trim(),
-    '',
-  ].join('\n');
-
-  fs.writeFileSync(meta.filePath, content, 'utf-8');
+  archiveSkillVersion(meta, current);
+  atomicWriteFile(meta.filePath, draft.content);
   loadSkills();
   return skills.get(meta.id)!;
 }

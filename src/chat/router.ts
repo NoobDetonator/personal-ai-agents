@@ -1,5 +1,4 @@
 import type { ChatContext } from './cli.js';
-import { looksFabricated, looksUnfinished, ANTI_FABRICATION_RETRY_HINT, CONTINUE_HINT } from '../agents/agent.js';
 import { findCommand } from './commands.js';
 import * as renderer from './renderer.js';
 import { processGroupMessage } from './group-chat.js';
@@ -108,70 +107,29 @@ export async function route(input: string, ctx: ChatContext): Promise<void> {
   const systemHint = hints.length > 0 ? hints.join('\n\n') : undefined;
 
   try {
-    const streamHandlers = {
-      onTextDelta: (text: string) => renderer.renderStreamChunk(text),
-      onToolCall: (toolName: string) => renderer.renderStreamToolCall(toolName, config.display.showToolCalls),
-    };
-
     renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
-    let result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
-      systemHint,
-      contextData: recalledContext,
-    });
-    renderer.renderStreamEnd();
-    let turnToolCallCount = result.toolCallCount;
-
-    // Auto-continuacao: turno cortado no meio do trabalho (limite de passos/
-    // tokens) ou terminado com promessa nao cumprida → continua (max 2x)
-    let continuations = 0;
-    while (looksUnfinished(result.text, result.finishReason) && continuations < 2) {
-      continuations++;
-      renderer.renderSystemMessage('(turno interrompido no meio do trabalho — continuando automaticamente...)');
-
-      if (!ctx.conversationId) {
-        ctx.conversationId = getOrCreateConversation(ctx.activeAgent.id);
-      }
-      ctx.messageHistory.push({ role: 'assistant' as const, content: result.text });
-      ctx.messageHistory.push({ role: 'user' as const, content: CONTINUE_HINT });
-      saveDirectMessage(ctx.conversationId, 'assistant', result.text, ctx.activeAgent.id, result.inputTokens, result.outputTokens);
-      saveDirectMessage(ctx.conversationId, 'user', CONTINUE_HINT, null);
-
-      renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
-      result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
+    const result = await ctx.activeAgent.runGuardedTurn(
+      ctx.messageHistory,
+      {
+        onTextDelta: (text) => renderer.renderStreamChunk(text),
+        onToolCall: (toolName) => renderer.renderStreamToolCall(toolName, config.display.showToolCalls),
+        onGuardRetry: (reason) => renderer.renderSystemMessage(
+          reason === 'unfinished'
+            ? '(turno interrompido - continuando automaticamente...)'
+            : reason === 'missing_tool'
+              ? '(execucao obrigatoria: nenhuma ferramenta relevante foi usada - refazendo...)'
+              : '(anti-fabricacao: faltou evidencia real - refazendo o turno...)',
+        ),
+      },
+      {
         systemHint,
         contextData: recalledContext,
-      });
-      renderer.renderStreamEnd();
-      turnToolCallCount += result.toolCallCount;
-    }
+      },
+    );
+    renderer.renderStreamEnd();
 
-    // Anti-fabricacao: alegou execucao sem chamar nenhuma ferramenta →
-    // descarta a resposta e refaz o turno uma unica vez, com correcao
-    if (looksFabricated(result.text, turnToolCallCount)) {
-      renderer.renderSystemMessage('(anti-fabricacao: a resposta alegou execucao sem usar ferramentas — refazendo o turno)');
-      renderer.renderStreamStart(ctx.activeAgent.id, ctx.activeAgent.name);
-      result = await ctx.activeAgent.chatStream(ctx.messageHistory, streamHandlers, {
-        systemHint: [systemHint, ANTI_FABRICATION_RETRY_HINT].filter(Boolean).join('\n\n'),
-        contextData: recalledContext,
-      });
-      renderer.renderStreamEnd();
-
-      // Fabricou de novo: nunca entregar alegacao falsa — registra a verdade
-      // no historico (quebra o ciclo de imitacao nas proximas conversas)
-      if (looksFabricated(result.text, result.toolCallCount)) {
-        renderer.renderError('O agente alegou execucao sem chamar ferramentas duas vezes. Resposta descartada — NADA foi executado.');
-        result = {
-          ...result,
-          text:
-            '[Aviso do sistema] Minha resposta anterior foi descartada: eu aleguei ter executado uma acao sem realmente chamar a ferramenta. NADA foi executado. Por favor, repita o pedido para que eu execute de verdade.',
-        };
-      }
-    }
-
-    // Add assistant response to history
     ctx.messageHistory.push({ role: 'assistant' as const, content: result.text });
 
-    // Persist to DB
     if (!ctx.conversationId) {
       ctx.conversationId = getOrCreateConversation(ctx.activeAgent.id);
     }

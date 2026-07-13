@@ -44,6 +44,7 @@ test('run bem-sucedido persiste mensagens, eventos ordenados e status done', asy
       handlers.onTextDelta('oi ');
       handlers.onToolCall('readFile');
       handlers.onToolResult?.('readFile', { ok: true });
+      handlers.onSkillActivated?.('system-prompter');
       handlers.onTextDelta('pronto');
       return { text: 'oi pronto', inputTokens: 10, outputTokens: 5, cachedInputTokens: 0, toolCallCount: 1, finishReason: 'stop' };
     },
@@ -65,6 +66,12 @@ test('run bem-sucedido persiste mensagens, eventos ordenados e status done', asy
   assert.ok(types.includes('text_delta'));
   assert.ok(types.includes('tool_start'));
   assert.ok(types.includes('tool_result'));
+  assert.ok(types.includes('skill_activated'));
+  const toolResult = events.find(event => event.type === 'tool_result');
+  assert.ok(toolResult?.payload_json);
+  const toolPayload = JSON.parse(toolResult.payload_json);
+  assert.equal(toolPayload.effect, 'read');
+  assert.equal(toolPayload.success, true);
   assert.equal(types[types.length - 1], 'status'); // done
 
   // mensagens do usuário e do assistente, ambas vinculadas ao run

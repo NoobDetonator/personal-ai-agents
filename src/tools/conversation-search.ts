@@ -4,6 +4,7 @@ import { getDb } from '../db/connection.js';
 import { deleteConversation } from '../db/conversation-helpers.js';
 import { emitBus } from '../web/bus.js';
 import { getProjectContext } from '../projects/context.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 interface SearchRow {
   conversation_id: string;
@@ -75,7 +76,17 @@ export function createConversationMgmtTools(agentId: string) {
       const owned = getDb().prepare(
         "SELECT 1 FROM conversations WHERE id = ? AND COALESCE(project_id, 'legacy') = ?",
       ).get(conversationId, projectId);
-      const ok = !!owned && deleteConversation(conversationId);
+      if (!owned) return { error: `Conversa "${conversationId}" nao encontrada.` };
+      const confirmation = await askConfirmation(
+        `Apagar permanentemente a conversa "${conversationId}" e todas as mensagens dela?`,
+        { allowAlways: false },
+      );
+      if (confirmation.answer !== 'yes') {
+        return { error: confirmation.timedOut
+          ? 'Confirmacao expirou. A conversa nao foi apagada.'
+          : 'Exclusao negada pelo usuario. A conversa nao foi apagada.' };
+      }
+      const ok = deleteConversation(conversationId);
       if (!ok) return { error: `Conversa "${conversationId}" nao encontrada.` };
       emitBus('conversation_changed', { conversationId, action: 'deleted' });
       return { success: true, conversationId };
@@ -90,11 +101,24 @@ export function createConversationMgmtTools(agentId: string) {
     execute: async ({ targetAgentId }) => {
       const target = targetAgentId ?? agentId;
       const projectId = getProjectContext()?.projectId ?? 'legacy';
-      const count = getDb().prepare(
+      const count = (getDb().prepare(
+        "SELECT COUNT(*) AS count FROM conversations WHERE agent_id = ? AND COALESCE(project_id, 'legacy') = ?",
+      ).get(target, projectId) as { count: number }).count;
+      if (count === 0) return { success: true, deleted: 0 };
+      const confirmation = await askConfirmation(
+        `Apagar permanentemente ${count} conversa(s) do agente "${target}"?`,
+        { allowAlways: false },
+      );
+      if (confirmation.answer !== 'yes') {
+        return { error: confirmation.timedOut
+          ? 'Confirmacao expirou. Nenhuma conversa foi apagada.'
+          : 'Limpeza negada pelo usuario. Nenhuma conversa foi apagada.' };
+      }
+      const deleted = getDb().prepare(
         "DELETE FROM conversations WHERE agent_id = ? AND COALESCE(project_id, 'legacy') = ?",
       ).run(target, projectId).changes;
-      emitBus('conversation_changed', { agentId: target, action: 'cleared', count });
-      return { success: true, deleted: count };
+      emitBus('conversation_changed', { agentId: target, action: 'cleared', count: deleted });
+      return { success: true, deleted };
     },
   });
 

@@ -249,6 +249,22 @@ function runProjectMigrations(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_audit_events_project ON audit_events(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events(action, created_at);
+
+    CREATE TABLE IF NOT EXISTS agent_runtime_events (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT,
+      conversation_id TEXT,
+      run_id          TEXT,
+      agent_id        TEXT NOT NULL,
+      surface         TEXT NOT NULL,
+      type            TEXT NOT NULL,
+      payload_json    TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_runtime_project ON agent_runtime_events(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_runtime_agent ON agent_runtime_events(agent_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_runtime_type ON agent_runtime_events(type, created_at);
   `);
 
   // Colunas aditivas nas tabelas existentes (guardadas por pragma).

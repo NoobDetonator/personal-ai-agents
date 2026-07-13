@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
 import { getProjectContext } from '../projects/context.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 export function createSchedulingTools(agentId: string) {
   const createScheduleTool = tool({
@@ -13,6 +14,15 @@ export function createSchedulingTools(agentId: string) {
     }),
     execute: async ({ cronExpression, taskDescription }) => {
       try {
+        const confirmation = await askConfirmation(
+          `Criar uma automacao recorrente com cron "${cronExpression}" para: ${taskDescription.slice(0, 180)}?`,
+          { allowAlways: false },
+        );
+        if (confirmation.answer !== 'yes') {
+          return { error: confirmation.timedOut
+            ? 'Confirmacao expirou. O agendamento nao foi criado.'
+            : 'Agendamento negado pelo usuario.' };
+        }
         const db = getDb();
         const id = randomUUID();
         const projectId = getProjectContext()?.projectId ?? 'legacy';
@@ -55,6 +65,19 @@ export function createSchedulingTools(agentId: string) {
     execute: async ({ scheduleId }) => {
       const db = getDb();
       const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const existing = db.prepare(
+        "SELECT task_prompt FROM schedules WHERE id = ? AND COALESCE(project_id, 'legacy') = ?",
+      ).get(scheduleId, projectId) as { task_prompt: string } | undefined;
+      if (!existing) return { error: `Tarefa "${scheduleId}" nao encontrada.` };
+      const confirmation = await askConfirmation(
+        `Remover permanentemente o agendamento "${scheduleId}" (${existing.task_prompt.slice(0, 160)})?`,
+        { allowAlways: false },
+      );
+      if (confirmation.answer !== 'yes') {
+        return { error: confirmation.timedOut
+          ? 'Confirmacao expirou. O agendamento nao foi removido.'
+          : 'Remocao negada pelo usuario.' };
+      }
       const result = db.prepare("DELETE FROM schedules WHERE id = ? AND COALESCE(project_id, 'legacy') = ?").run(scheduleId, projectId);
       if (result.changes === 0) {
         return { error: `Tarefa "${scheduleId}" nao encontrada.` };

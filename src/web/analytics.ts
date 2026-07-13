@@ -29,7 +29,9 @@ export interface AnalyticsResult {
   };
   operational: {
     runs: KpiPair; runsDone: number; runsFailed: number; runsTimedOut: number; runsCancelled: number;
-    successRate: KpiPair; toolCalls: KpiPair; toolCallRate: KpiPair; avgRunMs: number | null;
+    successRate: KpiPair; toolCalls: KpiPair; toolCallRate: KpiPair;
+    toolResults: number; toolFailures: number; toolSuccessRate: number; skillActivations: number;
+    avgRunMs: number | null;
   };
   series: AnalyticsSeriesPoint[];
   taskStatus: Record<string, number>;
@@ -79,6 +81,8 @@ export function getAnalytics(db: Database.Database, agents: AnalyticsAgentInfo[]
   const msgProject = projectCond('c.project_id', filters.projects);
   const usageProject = projectCond('u.project_id', filters.projects);
   const runProject = projectCond('r.project_id', filters.projects);
+  const runtimeAgent = valuesCond('e.agent_id', ids);
+  const runtimeProject = projectCond('e.project_id', filters.projects);
   const taskProject = projectCond('t.project_id', filters.projects);
 
   const tokenRow = db.prepare(
@@ -165,6 +169,17 @@ export function getAnalytics(db: Database.Database, agents: AnalyticsAgentInfo[]
      WHERE e.type = 'tool_start' AND r.created_at >= ?${runAgent.sql}${runProject.sql}`,
   ).get(since, since, since, since, prevSince, ...runAgent.params, ...runProject.params) as
     { curCalls: number | null; prevCalls: number | null; curRuns: number | null; prevRuns: number | null };
+
+  const runtimeRow = db.prepare(
+    `SELECT
+       SUM(CASE WHEN e.type = 'tool_result' AND e.created_at >= ? THEN 1 ELSE 0 END) AS results,
+       SUM(CASE WHEN e.type = 'tool_result' AND e.created_at >= ?
+                 AND json_extract(e.payload_json, '$.success') = 0 THEN 1 ELSE 0 END) AS failures,
+       SUM(CASE WHEN e.type = 'skill_activated' AND e.created_at >= ? THEN 1 ELSE 0 END) AS skills
+     FROM agent_runtime_events e
+     WHERE e.created_at >= ?${runtimeAgent.sql}${runtimeProject.sql}`,
+  ).get(since, since, since, since, ...runtimeAgent.params, ...runtimeProject.params) as
+    { results: number | null; failures: number | null; skills: number | null };
 
   const runStatusRows = db.prepare(
     `SELECT r.status, COUNT(*) AS c FROM runs r
@@ -321,6 +336,10 @@ export function getAnalytics(db: Database.Database, agents: AnalyticsAgentInfo[]
       successRate: { current: ratio(runDone, runDone + runFailures), previous: ratio(runRow.prevDone ?? 0, (runRow.prevDone ?? 0) + previousRunFailures) },
       toolCalls: { current: toolRow.curCalls ?? 0, previous: toolRow.prevCalls ?? 0 },
       toolCallRate: { current: ratio(toolRow.curRuns ?? 0, curRuns), previous: ratio(toolRow.prevRuns ?? 0, prevRuns) },
+      toolResults: runtimeRow.results ?? 0,
+      toolFailures: runtimeRow.failures ?? 0,
+      toolSuccessRate: ratio((runtimeRow.results ?? 0) - (runtimeRow.failures ?? 0), runtimeRow.results ?? 0),
+      skillActivations: runtimeRow.skills ?? 0,
       avgRunMs: runRow.avgMs,
     },
     series, taskStatus, runStatus, agentLoad, projectBreakdown,

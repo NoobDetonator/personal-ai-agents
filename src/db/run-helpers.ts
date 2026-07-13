@@ -20,6 +20,7 @@ export type RunEventType =
   | 'text_delta'
   | 'tool_start'
   | 'tool_result'
+  | 'skill_activated'
   | 'agent_created'
   | 'delegation_start'
   | 'delegation_end'

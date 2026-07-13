@@ -15,6 +15,7 @@ import { createGroupTools } from './group-tool.js';
 import { getMcpTools } from '../mcp/manager.js';
 import { getConfig } from '../config/loader.js';
 import type { Agent } from '../agents/agent.js';
+import { allowedToolNamesForAgent } from './policy.js';
 
 export function canAuthorSkills(role: string): boolean {
   return role === 'principal';
@@ -45,7 +46,7 @@ export function buildToolSet(
     ? { createSkill: createSkillTool, updateSkill: updateSkillTool }
     : {};
 
-  return {
+  const completeToolSet: ToolSet = {
     ...getMcpTools(),
     ...leaderTools,
     ...skillAuthoringTools,
@@ -106,4 +107,10 @@ export function buildToolSet(
     getCurrentTime: getCurrentTimeTool,
     getSystemInfo: getSystemInfoTool,
   };
+
+  const profile = getConfig().agents[agentId]?.profile;
+  const allowed = new Set(allowedToolNamesForAgent(role, profile, Object.keys(completeToolSet)));
+  return Object.fromEntries(
+    Object.entries(completeToolSet).filter(([name]) => allowed.has(name)),
+  ) as ToolSet;
 }

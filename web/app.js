@@ -1630,7 +1630,7 @@ async function renderOverview() {
         op.avgRunMs != null ? `média ${(op.avgRunMs / 1000).toFixed(1)}s · ${op.runsDone} concluídos` : 'sem execuções registradas',
         trendChip(op.runs))}
       ${kpiCard('Tool calling', fmtPct(op.toolCallRate.current),
-        `${op.toolCalls.current} chamadas de ferramenta`, trendChip(op.toolCallRate, { mode: 'pp' }))}
+        `${op.toolCalls.current} chamadas � ${op.toolResults || 0} resultados � ${fmtPct(op.toolSuccessRate || 0)} sucesso � ${op.skillActivations || 0} skills`, trendChip(op.toolCallRate, { mode: 'pp' }))}
       ${kpiCard('Timeouts', op.runsTimedOut,
         `${op.runsFailed} falhas · ${op.runsCancelled} cancelados`,
         op.runsTimedOut ? '<span class="ds-stat-card__trend ds-stat-card__trend--down">requer atenção</span>' : '<span class="ds-stat-card__trend ds-stat-card__trend--up">sem timeouts</span>')}

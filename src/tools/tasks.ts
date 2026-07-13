@@ -315,6 +315,19 @@ export function createTaskTools(agentId: string): ToolSet {
         return { error: `Tarefa "${taskId}" esta em execucao e nao pode ser deletada. Cancele a delegacao primeiro.` };
       }
       const projectId = getProjectContext()?.projectId ?? 'legacy';
+      const existing = getDb().prepare(
+        "SELECT title FROM tasks WHERE id = ? AND COALESCE(project_id, 'legacy') = ?",
+      ).get(taskId, projectId) as { title: string } | undefined;
+      if (!existing) return { error: `Tarefa "${taskId}" nao encontrada.` };
+      const confirmation = await askConfirmation(
+        `Deletar permanentemente a tarefa "${existing.title}" (${taskId})?`,
+        { allowAlways: false },
+      );
+      if (confirmation.answer !== 'yes') {
+        return { error: confirmation.timedOut
+          ? 'Confirmacao expirou. A tarefa nao foi deletada.'
+          : 'Exclusao negada pelo usuario. A tarefa nao foi deletada.' };
+      }
       const info = getDb().prepare("DELETE FROM tasks WHERE id = ? AND COALESCE(project_id, 'legacy') = ?").run(taskId, projectId);
       if (info.changes === 0) return { error: `Tarefa "${taskId}" nao encontrada.` };
       emitBus('board_changed', { taskId, action: 'deleted' });

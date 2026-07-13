@@ -6,6 +6,7 @@ export type BusEventType =
   | 'stream_end'     // { agentId, agentName, text }
   | 'tool_call'      // { agentId, toolName }
   | 'tool_result'    // { agentId, toolName, result }
+  | 'skill_activated' // { agentId, skillId }
   | 'stream_reset'   // { runId, reason }
   | 'stream_continue' // { runId, reason }
   | 'confirmation_requested' // { id, projectId?, conversationId?, runId? }

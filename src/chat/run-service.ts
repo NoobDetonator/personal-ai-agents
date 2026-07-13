@@ -19,6 +19,7 @@ import { runWithProjectContext } from '../projects/context.js';
 import { emitBus } from '../web/bus.js';
 import { rejectConfirmationsForRun } from './confirm.js';
 import { recallRelevantMemories } from '../agents/recall.js';
+import { getToolEffect, isToolOutputSuccess } from '../tools/effects.js';
 
 // ChatRunService: orquestra um turno de chat como um Run, independente da CLI
 // (sem readline nem renderer de terminal). Persiste run_events para retomada e
@@ -28,7 +29,8 @@ export interface TurnHandlers {
   onTextDelta: (text: string) => void;
   onToolCall: (toolName: string) => void;
   onToolResult?: (toolName: string, output: unknown) => void;
-  onGuardRetry?: (reason: 'unfinished' | 'fabrication') => void;
+  onSkillActivated?: (skillId: string) => void;
+  onGuardRetry?: (reason: 'unfinished' | 'fabrication' | 'missing_tool') => void;
 }
 
 export interface TurnOutcome {
@@ -77,6 +79,7 @@ const defaultExecutor: TurnExecutor = async ({ agentId, messages, handlers, abor
       onTextDelta: handlers.onTextDelta,
       onToolCall: handlers.onToolCall,
       onToolResult: handlers.onToolResult,
+      onSkillActivated: handlers.onSkillActivated,
       onGuardRetry: handlers.onGuardRetry,
     },
     { abortSignal, contextData: contextData ?? undefined },
@@ -170,7 +173,7 @@ async function executeRun(
         emitBus('stream_delta', { agentId, text, projectId, conversationId, runId, seq });
       },
       onToolCall: (toolName) => {
-        const seq = appendRunEvent(runId, 'tool_start', { tool: toolName });
+        const seq = appendRunEvent(runId, 'tool_start', { tool: toolName, effect: getToolEffect(toolName) });
         emitBus('tool_call', { agentId, toolName, projectId, conversationId, runId, seq });
       },
       onToolResult: (toolName, output) => {
@@ -181,8 +184,14 @@ async function executeRun(
         } catch {
           result = String(output);
         }
-        const seq = appendRunEvent(runId, 'tool_result', { tool: toolName, result });
-        emitBus('tool_result', { agentId, toolName, result, projectId, conversationId, runId, seq });
+        const success = isToolOutputSuccess(output);
+        const effect = getToolEffect(toolName);
+        const seq = appendRunEvent(runId, 'tool_result', { tool: toolName, effect, success, result });
+        emitBus('tool_result', { agentId, toolName, effect, success, result, projectId, conversationId, runId, seq });
+      },
+      onSkillActivated: (skillId) => {
+        const seq = appendRunEvent(runId, 'skill_activated', { skillId });
+        emitBus('skill_activated', { agentId, skillId, projectId, conversationId, runId, seq });
       },
       onGuardRetry: (reason) => {
         const seq = appendRunEvent(runId, 'status', { status: 'retrying', reason });

@@ -222,9 +222,16 @@ async function agentTurn(
     }
 
     renderer.renderStreamStart(agent.id, agent.name);
-    const result = await agent.chatStream(messagesForAgent, {
+    const result = await agent.runGuardedTurn(messagesForAgent, {
       onTextDelta: (text) => renderer.renderStreamChunk(text),
       onToolCall: (toolName) => renderer.renderStreamToolCall(toolName, showToolCalls),
+      onGuardRetry: (reason) => renderer.renderSystemMessage(
+        reason === 'unfinished'
+          ? `(${agent.name}: turno interrompido - continuando...)`
+          : reason === 'missing_tool'
+            ? `(${agent.name}: ferramenta obrigatoria ausente - refazendo...)`
+            : `(${agent.name}: verificacao anti-fabricacao - refazendo...)`,
+      ),
     });
     renderer.renderStreamEnd();
 

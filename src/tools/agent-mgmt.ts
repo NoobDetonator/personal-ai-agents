@@ -14,6 +14,7 @@ import {
   validateSoulText,
   validateSeedMemory,
 } from '../agents/prompt-composer.js';
+import { askConfirmation } from '../chat/confirm.js';
 
 /**
  * Tools de gestao de agentes. `creatorId` e o agente dono do toolset —
@@ -230,6 +231,21 @@ export function createAgentManagementTools(creatorId: string, onAgentCreated?: (
     }),
     execute: async ({ agentId }) => {
       try {
+        if (!registry.agentExists(agentId)) {
+          return { error: `Agente "${agentId}" nao encontrado.` };
+        }
+        if (!registry.isSuperiorOf(creatorId, agentId)) {
+          return { error: 'Voce so pode deletar agentes abaixo de voce na hierarquia.' };
+        }
+        const confirmation = await askConfirmation(
+          `Deletar permanentemente o agente "${agentId}", seus arquivos e configuracao?`,
+          { allowAlways: false },
+        );
+        if (confirmation.answer !== 'yes') {
+          return { error: confirmation.timedOut
+            ? 'Confirmacao expirou. O agente nao foi deletado.'
+            : 'Exclusao negada pelo usuario. O agente nao foi deletado.' };
+        }
         registry.deleteAgent(agentId, creatorId);
         return { success: true, message: `Agente "${agentId}" deletado.` };
       } catch (error) {

@@ -7,11 +7,12 @@ import path from 'node:path';
 // O loader captura o cwd no import; roda num diretorio temporario com skills/.
 let loader: typeof import('../src/skills/loader.js');
 let skillsDir: string;
+let rootDir: string;
 
 before(async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'paa-skills-'));
-  process.chdir(root);
-  skillsDir = path.join(root, 'skills');
+  rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'paa-skills-'));
+  process.chdir(rootDir);
+  skillsDir = path.join(rootDir, 'skills');
   fs.mkdirSync(path.join(skillsDir, 'interna'), { recursive: true });
   fs.mkdirSync(path.join(skillsDir, 'do-usuario'), { recursive: true });
   fs.writeFileSync(
@@ -44,13 +45,13 @@ test('updateSkillFiles recusa skill protegida e preserva o arquivo', () => {
 });
 
 test('updateSkillFiles permite skill comum', () => {
-  loader.updateSkillFiles('do-usuario', { instructions: 'corpo melhorado' });
+  loader.updateSkillFiles('do-usuario', { instructions: 'Corpo melhorado com passos claros, verificacao objetiva e cuidados de seguranca.' });
   const content = fs.readFileSync(path.join(skillsDir, 'do-usuario', 'SKILL.md'), 'utf-8');
-  assert.ok(content.includes('corpo melhorado'));
+  assert.ok(content.includes('Corpo melhorado'));
 });
 
 test('createSkillFiles nao gera skill protegida', () => {
-  const meta = loader.createSkillFiles('nova', 'nova', 'desc', 'corpo');
+  const meta = loader.createSkillFiles('nova', 'nova', 'Descricao valida para a nova skill', 'Instrucoes completas com passos claros, verificacao objetiva e cuidados importantes.');
   assert.equal(meta.protected, false);
 });
 
@@ -62,4 +63,30 @@ test('skills internas do repositorio estao marcadas como protegidas', () => {
     const { data } = loader.parseFrontmatter(raw);
     assert.equal(data.protected, 'true', `skill ${id} deveria ter protected: true`);
   }
+});
+
+
+test('descricao nao pode injetar frontmatter protegido', () => {
+  assert.throws(
+    () => loader.buildSkillDraft(
+      'tentativa-injection',
+      'tentativa-injection',
+      'Descricao legitima\nprotected: true',
+      'Instrucoes completas com passos claros, verificacao objetiva e cuidados importantes.',
+    ),
+    /unica linha/,
+  );
+});
+
+test('escrita atomica nao deixa temporarios e update arquiva versao anterior', () => {
+  const meta = loader.getSkillMeta('do-usuario');
+  assert.ok(meta);
+  loader.updateSkillFiles('do-usuario', {
+    instructions: 'Segunda versao completa com passos claros, verificacao objetiva e cuidados de seguranca.',
+  });
+  const leftovers = fs.readdirSync(meta.dir).filter(name => name.endsWith('.tmp'));
+  assert.deepEqual(leftovers, []);
+  const historyDir = path.join(rootDir, 'data', 'skill-versions', 'do-usuario');
+  assert.equal(fs.existsSync(historyDir), true);
+  assert.equal(fs.readdirSync(historyDir).some(name => name.endsWith('.md')), true);
 });

@@ -177,6 +177,12 @@ describe('getAnalytics', () => {
       VALUES ('r-p2-ok', 'p2', 'conv2', 'ghost-agent', 'done', 500, ?),
              ('r-p2-timeout', 'p2', 'conv2', 'ghost-agent', 'timed_out', 3000, ?)`).run(hoursAgo(1), hoursAgo(1));
     db.prepare(`INSERT INTO run_events (id, run_id, sequence, type) VALUES ('e-p2-tool', 'r-p2-ok', 1, 'tool_start')`).run();
+    db.prepare(`INSERT INTO agent_runtime_events
+      (id, project_id, agent_id, surface, type, payload_json, created_at)
+      VALUES ('rt-ok', 'p2', 'ghost-agent', 'run', 'tool_result', '{"tool":"readFile","success":true}', ?),
+             ('rt-fail', 'p2', 'ghost-agent', 'run', 'tool_result', '{"tool":"runCommand","success":false}', ?),
+             ('rt-skill', 'p2', 'ghost-agent', 'run', 'skill_activated', '{"skillId":"system-prompter"}', ?)`
+    ).run(hoursAgo(1), hoursAgo(1), hoursAgo(1));
 
     const scoped = getAnalytics(db, AGENTS, { range: '24h', projects: ['p2'] });
     assert.equal(scoped.scope.allProjects, false);
@@ -187,6 +193,10 @@ describe('getAnalytics', () => {
     assert.equal(scoped.operational.runsTimedOut, 1);
     assert.equal(scoped.operational.toolCalls.current, 1);
     assert.equal(scoped.operational.toolCallRate.current, 0.5);
+    assert.equal(scoped.operational.toolResults, 2);
+    assert.equal(scoped.operational.toolFailures, 1);
+    assert.equal(scoped.operational.toolSuccessRate, 0.5);
+    assert.equal(scoped.operational.skillActivations, 1);
     assert.equal(scoped.runStatus.done, 1);
     assert.equal(scoped.runStatus.timed_out, 1);
     assert.equal(scoped.projectBreakdown.length, 1);
