@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/connection.js';
 import { LEGACY_PROJECT_ID, LEGACY_PROJECT_ROOT } from '../db/schema.js';
 import type { ProjectExecutionContext } from './context.js';
+import { getProjectTemplate } from './templates.js';
 
 export { LEGACY_PROJECT_ID } from '../db/schema.js';
 
@@ -34,6 +35,7 @@ export interface CreateProjectInput {
   description?: string | null;
   defaultModel?: string | null;
   defaultProvider?: string | null;
+  templateId?: string | null;
 }
 
 const PROJECTS_SUBDIR = 'workspace/projects';
@@ -121,6 +123,7 @@ export function createProject(input: CreateProjectInput): Project {
   if (!name) throw new Error('Nome do projeto é obrigatório.');
 
   const db = getDb();
+  const template = getProjectTemplate(input.templateId);
   const id = randomUUID();
   const slug = uniqueSlug(slugify(name));
   const rootPath = `${PROJECTS_SUBDIR}/${id}/files`;
@@ -147,6 +150,14 @@ export function createProject(input: CreateProjectInput): Project {
     const project = getProject(id)!;
     dirCreated = true;
     ensureProjectDirectories(project);
+    const filesRoot = resolveProjectRoot(project);
+    for (const [relative, content] of Object.entries(template.files)) {
+      const destination = path.resolve(filesRoot, relative);
+      const withinRoot = path.relative(filesRoot, destination);
+      if (withinRoot.startsWith('..') || path.isAbsolute(withinRoot)) throw new Error('Template contem caminho invalido.');
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, content, { encoding: 'utf-8', flag: 'wx' });
+    }
     fs.writeFileSync(
       path.join(projectDir, 'project.json'),
       JSON.stringify({ id, name, slug, description: input.description ?? null, root_path: rootPath }, null, 2),

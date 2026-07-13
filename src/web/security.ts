@@ -167,11 +167,11 @@ export class WebSecurity {
   }
 
   private capabilityForPath(pathname: string, method: string): RemoteCapability | null {
-    if (pathname === '/api/settings' || pathname === '/api/diagnostics' || pathname === '/api/audit') return 'settings';
+    if (pathname === '/api/settings' || pathname === '/api/diagnostics' || pathname === '/api/audit' || pathname === '/api/project-templates') return 'settings';
     if (pathname === '/api/projects' && method !== 'GET') return 'settings';
     if (/^\/api\/projects\/[^/]+(?:\/archive)?$/.test(pathname) && method !== 'GET') return 'settings';
     if (/\/api\/projects\/[^/]+\/settings$/.test(pathname)) return 'settings';
-    if (/\/api\/projects\/[^/]+\/export$/.test(pathname)) return 'settings';
+    if (/\/api\/projects\/[^/]+\/(export|backup|backups)$/.test(pathname)) return 'settings';
 
     if (pathname === '/api/events' || pathname === '/api/confirm'
       || pathname.startsWith('/api/conversations/') || pathname.startsWith('/api/runs/')

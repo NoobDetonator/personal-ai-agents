@@ -136,6 +136,10 @@ test('login cria cookie seguro e permissoes remotas sao independentes', async ()
   assert.equal(createProject.response.status, 403);
   const exportData = await request(`/api/projects/${projectId}/export`, { cookie });
   assert.equal(exportData.response.status, 403);
+  const backups = await request(`/api/projects/${projectId}/backups`, { cookie });
+  assert.equal(backups.response.status, 403);
+  const templates = await request('/api/project-templates', { cookie });
+  assert.equal(templates.response.status, 403);
   const stateResponse = await request('/api/state', { cookie });
   assert.equal(stateResponse.response.status, 200);
 

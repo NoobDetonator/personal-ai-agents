@@ -172,6 +172,123 @@ export function readProjectRawFile(projectId: string, filePath: string): { absol
   return { absolute: target.absolute, name: path.basename(target.relative), mime: mimeFor(target.relative, viewer), etag: etagFor(target.stat), size: target.stat.size };
 }
 
+export interface ProjectFileMutationResult { path: string; kind: 'file' | 'directory'; document?: ProjectFileDocument; }
+
+function resolveWriteTarget(projectId: string, input: string): { root: string; absolute: string; relative: string; parent: string } {
+  const project = getProject(projectId);
+  if (!project) throw new ProjectFileError(404, 'Projeto nao encontrado.');
+  const relative = normalizeRelativePath(input);
+  if (!relative) throw new ProjectFileError(400, 'Informe um caminho de arquivo ou pasta.');
+  assertVisibleSegments(projectId, relative);
+  const parentRelative = path.posix.dirname(relative) === '.' ? '' : path.posix.dirname(relative);
+  const parentTarget = resolveExisting(projectId, parentRelative);
+  if (!parentTarget.stat.isDirectory()) throw new ProjectFileError(400, 'A pasta de destino nao e valida.');
+  const absolute = path.join(parentTarget.absolute, path.posix.basename(relative));
+  if (!isInside(parentTarget.root, absolute)) throw new ProjectFileError(403, 'Caminho fora do projeto.');
+  if (fs.existsSync(absolute) && fs.lstatSync(absolute).isSymbolicLink()) {
+    throw new ProjectFileError(403, 'Links simbolicos e junctions nao sao permitidos.');
+  }
+  return { root: parentTarget.root, absolute, relative, parent: parentTarget.absolute };
+}
+
+function writeLockPath(absolute: string): string {
+  return path.join(path.dirname(absolute), `.${path.basename(absolute)}.paa-write.lock`);
+}
+
+export function writeProjectFile(
+  projectId: string,
+  filePath: string,
+  content: string,
+  options: { expectedEtag?: string | null; create?: boolean } = {},
+): ProjectFileDocument {
+  const bytes = Buffer.byteLength(content, 'utf-8');
+  if (bytes > MAX_TEXT_BYTES) throw new ProjectFileError(413, 'Arquivo de texto excede o limite de 2 MB.');
+  const target = resolveWriteTarget(projectId, filePath);
+  const lock = writeLockPath(target.absolute);
+  let lockHandle: number | null = null;
+  let temp: string | null = null;
+  try {
+    try { lockHandle = fs.openSync(lock, 'wx', 0o600); }
+    catch { throw new ProjectFileError(409, 'Outro salvamento deste arquivo esta em andamento.'); }
+
+    const exists = fs.existsSync(target.absolute);
+    if (exists) {
+      if (options.create) throw new ProjectFileError(409, 'O arquivo ja existe.');
+      const existing = resolveExisting(projectId, target.relative);
+      if (!existing.stat.isFile()) throw new ProjectFileError(400, 'O caminho informado nao e um arquivo.');
+      const viewer = viewerFor(existing.relative, existing.stat, fs.readFileSync(existing.absolute).subarray(0, 8192));
+      if (viewer === 'image' || viewer === 'pdf' || viewer === 'unsupported') throw new ProjectFileError(415, 'Este formato nao pode ser editado como texto.');
+      if (!options.expectedEtag) throw new ProjectFileError(428, 'Informe o ETag atual para salvar.');
+      if (etagFor(existing.stat) !== options.expectedEtag) throw new ProjectFileError(409, 'O arquivo mudou desde que foi aberto. Recarregue antes de salvar.');
+      temp = path.join(target.parent, `.${path.basename(target.absolute)}.paa-${process.pid}-${Date.now()}.tmp`);
+      fs.writeFileSync(temp, content, { encoding: 'utf-8', flag: 'wx', mode: existing.stat.mode });
+      const latest = fs.statSync(target.absolute);
+      if (etagFor(latest) !== options.expectedEtag) throw new ProjectFileError(409, 'O arquivo mudou durante o salvamento. Tente novamente.');
+      fs.renameSync(temp, target.absolute);
+      temp = null;
+    } else {
+      if (!options.create) throw new ProjectFileError(404, 'Arquivo nao encontrado.');
+      fs.writeFileSync(target.absolute, content, { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
+    }
+  } catch (error) {
+    if (error instanceof ProjectFileError) throw error;
+    throw new ProjectFileError(500, 'Nao foi possivel salvar o arquivo: ' + (error instanceof Error ? error.message : String(error)));
+  } finally {
+    try { if (temp && fs.existsSync(temp)) fs.rmSync(temp, { force: true }); } catch { /* best effort */ }
+    try { if (lockHandle !== null) fs.closeSync(lockHandle); } catch { /* best effort */ }
+    try { if (lockHandle !== null && fs.existsSync(lock)) fs.rmSync(lock, { force: true }); } catch { /* best effort */ }
+  }
+  return readProjectFile(projectId, target.relative);
+}
+
+export function createProjectDirectory(projectId: string, directory: string): ProjectFileMutationResult {
+  const target = resolveWriteTarget(projectId, directory);
+  if (fs.existsSync(target.absolute)) throw new ProjectFileError(409, 'O caminho ja existe.');
+  fs.mkdirSync(target.absolute);
+  return { path: target.relative, kind: 'directory' };
+}
+
+export function renameProjectPath(
+  projectId: string,
+  sourcePath: string,
+  destinationPath: string,
+  expectedEtag?: string | null,
+): ProjectFileMutationResult {
+  const source = resolveExisting(projectId, sourcePath);
+  if (!source.relative) throw new ProjectFileError(403, 'A raiz do projeto nao pode ser renomeada.');
+  if (!expectedEtag) throw new ProjectFileError(428, 'Informe o ETag atual para renomear.');
+  if (etagFor(source.stat) !== expectedEtag) throw new ProjectFileError(409, 'O item mudou desde que foi aberto.');
+  const destination = resolveWriteTarget(projectId, destinationPath);
+  if (fs.existsSync(writeLockPath(source.absolute))) throw new ProjectFileError(409, 'Outro salvamento deste arquivo esta em andamento.');
+  if (fs.existsSync(destination.absolute)) throw new ProjectFileError(409, 'O destino ja existe.');
+  fs.renameSync(source.absolute, destination.absolute);
+  return {
+    path: destination.relative,
+    kind: source.stat.isDirectory() ? 'directory' : 'file',
+    document: source.stat.isFile() ? readProjectFile(projectId, destination.relative) : undefined,
+  };
+}
+
+export function deleteProjectPath(
+  projectId: string,
+  targetPath: string,
+  confirmPath: string,
+  expectedEtag?: string | null,
+): ProjectFileMutationResult {
+  const target = resolveExisting(projectId, targetPath);
+  if (!target.relative) throw new ProjectFileError(403, 'A raiz do projeto nao pode ser excluida.');
+  if (confirmPath !== target.relative) throw new ProjectFileError(400, 'Confirmacao invalida: informe o caminho exato.');
+  if (!expectedEtag) throw new ProjectFileError(428, 'Informe o ETag atual para excluir.');
+  if (etagFor(target.stat) !== expectedEtag) throw new ProjectFileError(409, 'O item mudou desde que foi aberto.');
+  if (fs.existsSync(writeLockPath(target.absolute))) throw new ProjectFileError(409, 'Outro salvamento deste arquivo esta em andamento.');
+  const kind = target.stat.isDirectory() ? 'directory' : 'file';
+  if (kind === 'directory' && fs.readdirSync(target.absolute).length > 0) {
+    throw new ProjectFileError(409, 'A pasta precisa estar vazia para ser excluida.');
+  }
+  kind === 'directory' ? fs.rmdirSync(target.absolute) : fs.unlinkSync(target.absolute);
+  return { path: target.relative, kind };
+}
+
 export function searchProjectFiles(projectId: string, query: string): { query: string; results: ProjectFileSearchResult[]; truncated: boolean } {
   const needle = query.trim();
   if (needle.length < 2) throw new ProjectFileError(400, 'A busca precisa ter pelo menos 2 caracteres.');

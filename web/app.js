@@ -9,7 +9,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
-  return res.json();
+  const data = await res.json();
+  if (data && typeof data === 'object') Object.defineProperty(data, '__status', { value: res.status, enumerable: false });
+  return data;
 }
 
 function fmtTokens(n) {
@@ -427,6 +429,7 @@ async function renderProjectDetail(id) {
       <h2 class="ds-heading-2xl">${esc(p.name)} ${p.status === 'archived' ? '<span class="ds-badge ds-badge--warning">arquivado</span>' : ''}</h2>
       <div class="project-detail-actions">
         <a class="ds-btn ds-btn--outline ds-btn--sm" href="#/files"><i data-lucide="files" class="ds-icon ds-icon--xs"></i> Arquivos</a>
+        ${isLegacy ? '' : '<button class="ds-btn ds-btn--outline ds-btn--sm" id="pd-backups"><i data-lucide="archive-restore" class="ds-icon ds-icon--xs"></i> Backups</button>'}
         ${isLegacy ? '' : `<button class="ds-btn ds-btn--outline ds-btn--sm" id="pd-edit"><i data-lucide="pencil" class="ds-icon ds-icon--xs"></i> Editar</button>`}
         ${isLegacy ? '' : (p.status === 'archived'
           ? `<button class="ds-btn ds-btn--outline ds-btn--sm" data-project-restore="${esc(p.id)}"><i data-lucide="archive-restore" class="ds-icon ds-icon--xs"></i> Restaurar</button>`
@@ -453,6 +456,7 @@ async function renderProjectDetail(id) {
 
   $('#pd-new-conv')?.addEventListener('click', () => createConversation(p.id));
   $('#pd-edit')?.addEventListener('click', () => openEditProjectModal(p));
+  $('#pd-backups')?.addEventListener('click', () => openProjectBackupsModal(p));
   document.querySelectorAll('#view-project-detail [data-conversation-id]').forEach(item => {
     const title = item.querySelector('span')?.textContent || 'Conversa';
     const open = () => openChatConversation(item.dataset.conversationId, title);
@@ -468,7 +472,7 @@ function runStatusVariant(status) { return RUN_STATUS_VARIANT[status] || 'info';
 // --- Modais criar / editar ---
 
 async function openCreateProjectModal() {
-  const models = await getModels();
+  const [models, templates] = await Promise.all([getModels(), api('/api/project-templates')]);
   openModal(`
     <div class="ds-modal__header">
       <h3 class="ds-modal__title">Novo projeto</h3>
@@ -482,6 +486,12 @@ async function openCreateProjectModal() {
       <div class="ds-field" style="margin-top:14px;">
         <label class="ds-field__label">Descrição</label>
         <textarea class="ds-textarea" id="np-desc" rows="3" placeholder="Opcional"></textarea>
+      </div>
+      <div class="ds-field" style="margin-top:14px;">
+        <label class="ds-field__label">Template inicial</label>
+        <select class="ds-select" id="np-template">
+          ${templates.map(template => `<option value="${esc(template.id)}">${esc(template.name)} - ${esc(template.description)}</option>`).join('')}
+        </select>
       </div>
       <div class="ds-field" style="margin-top:14px;">
         <label class="ds-field__label">Modelo padrão</label>
@@ -518,6 +528,7 @@ async function openCreateProjectModal() {
       defaultModel: modelId || null,
       defaultProvider: model ? model.provider : null,
       createInitialConversation: $('#np-conv').checked,
+      templateId: $('#np-template').value,
     }));
     if (res.error || !res.project) {
       submit.disabled = false;
@@ -531,6 +542,41 @@ async function openCreateProjectModal() {
   };
   submit.addEventListener('click', doSubmit);
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
+}
+
+async function openProjectBackupsModal(project) {
+  const backups = await api(`/api/projects/${encodeURIComponent(project.id)}/backups`);
+  const rows = backups.length ? backups.map(backup => `
+    <div class="data-list-row">
+      <span class="data-list-row__icon"><i data-lucide="archive" class="ds-icon ds-icon--sm"></i></span>
+      <span class="data-list-row__main"><b>${esc(new Date(backup.createdAt).toLocaleString('pt-BR'))}</b><small>${backup.files} arquivos - ${fmtBytes(backup.size)}</small></span>
+      <a class="ds-btn ds-btn--ghost ds-btn--sm" href="/api/projects/${encodeURIComponent(project.id)}/backup?id=${encodeURIComponent(backup.id)}" download><i data-lucide="download" class="ds-icon ds-icon--xs"></i> Baixar</a>
+      <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" data-backup-delete="${esc(backup.id)}" title="Excluir"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button>
+    </div>`).join('') : '<div class="ds-empty-state" style="padding:24px"><p>Nenhum backup criado.</p></div>';
+  openModal(`
+    <div class="ds-modal__header"><div><h3 class="ds-modal__title">Backups de ${esc(project.name)}</h3><p class="ds-caption">Bundle JSON com dados e arquivos, sem .env ou chaves.</p></div><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><div class="data-list">${rows}</div><div class="ds-field__error hidden" id="backup-error" style="margin-top:12px"><span></span></div></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Fechar</button><button class="ds-btn ds-btn--primary" id="backup-create"><i data-lucide="database-backup" class="ds-icon ds-icon--xs"></i> Criar backup</button></div>`, 'lg');
+  $('#backup-create').addEventListener('click', async event => {
+    event.currentTarget.disabled = true;
+    const result = await api(`/api/projects/${encodeURIComponent(project.id)}/backups`, jsonPost({}));
+    if (result.error) { event.currentTarget.disabled = false; return showModalError($('#backup-error'), result.error); }
+    await openProjectBackupsModal(project);
+  });
+  document.querySelectorAll('[data-backup-delete]').forEach(button => button.addEventListener('click', () => {
+    const id = button.dataset.backupDelete;
+    openModal(`
+      <div class="ds-modal__header"><h3 class="ds-modal__title">Excluir backup</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+      <div class="ds-modal__body"><p class="ds-body-sm">Digite o identificador exato:</p><code class="ds-code">${esc(id)}</code><input class="ds-input" id="backup-delete-confirm" style="margin-top:14px"><div class="ds-field__error hidden" id="backup-delete-error" style="margin-top:12px"><span></span></div></div>
+      <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--danger" id="backup-delete-submit">Excluir</button></div>`);
+    $('#backup-delete-submit').addEventListener('click', async () => {
+      const result = await api(`/api/projects/${encodeURIComponent(project.id)}/backup?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmId: $('#backup-delete-confirm').value }),
+      });
+      if (result.error) return showModalError($('#backup-delete-error'), result.error);
+      await openProjectBackupsModal(project);
+    });
+  }));
 }
 
 function openEditProjectModal(p) {
@@ -1219,6 +1265,131 @@ function searchResultsHtml(search) {
     </button>`).join('') + (search.truncated ? '<p class="ds-caption ds-text-muted file-search-limit">Resultados limitados por segurança.</p>' : '');
 }
 
+function fileNameInCurrentDirectory(name) {
+  const clean = String(name || '').trim();
+  if (!clean || /[\\/]/.test(clean) || clean === '.' || clean === '..') return null;
+  return fileBrowser.directory ? fileBrowser.directory + '/' + clean : clean;
+}
+
+function startFileEditor(doc) {
+  if (!doc || typeof doc.content !== 'string') return;
+  const viewer = $('#file-viewer');
+  viewer.innerHTML = `
+    <div class="file-editor">
+      <div class="file-editor__bar">
+        <span><i data-lucide="shield-check" class="ds-icon ds-icon--xs"></i> ETag protegido</span>
+        <span id="file-editor-state">Alterações ainda não salvas</span>
+      </div>
+      <textarea id="file-editor-input" spellcheck="false" aria-label="Editor de ${esc(doc.name)}">${esc(doc.content)}</textarea>
+      <div class="file-editor__actions">
+        <button class="ds-btn ds-btn--ghost ds-btn--sm" id="file-editor-cancel">Cancelar</button>
+        <button class="ds-btn ds-btn--primary ds-btn--sm" id="file-editor-save"><i data-lucide="save" class="ds-icon ds-icon--xs"></i> Salvar</button>
+      </div>
+    </div>`;
+  const input = $('#file-editor-input');
+  const stateLabel = $('#file-editor-state');
+  const cancel = () => { viewer.innerHTML = fileViewerHtml(doc); refreshIcons(); };
+  const save = async () => {
+    const button = $('#file-editor-save');
+    button.disabled = true;
+    stateLabel.textContent = 'Salvando...';
+    const result = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/file`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'If-Match': doc.etag },
+      body: JSON.stringify({ path: doc.path, content: input.value }),
+    });
+    if (result.error) {
+      stateLabel.textContent = result.__status === 409
+        ? 'Conflito: o arquivo mudou. Copie seu rascunho e recarregue.'
+        : result.error;
+      stateLabel.classList.add('is-error');
+      button.disabled = false;
+      return;
+    }
+    fileBrowser.document = result.document;
+    await renderFiles(result.document.path);
+  };
+  $('#file-editor-cancel').addEventListener('click', cancel);
+  $('#file-editor-save').addEventListener('click', save);
+  input.addEventListener('input', () => { stateLabel.textContent = 'Alterações ainda não salvas'; stateLabel.classList.remove('is-error'); });
+  input.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
+  });
+  input.focus();
+  refreshIcons();
+}
+
+function openCreateFileItemModal(kind) {
+  const directoryLabel = fileBrowser.directory || 'raiz';
+  openModal(`
+    <div class="ds-modal__header"><h3 class="ds-modal__title">Nova ${kind === 'directory' ? 'pasta' : 'arquivo'}</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body">
+      <p class="ds-caption">Destino: ${esc(directoryLabel)}</p>
+      <div class="ds-field" style="margin-top:14px;"><label class="ds-field__label">Nome</label><input class="ds-input" id="new-file-name" autocomplete="off" placeholder="${kind === 'directory' ? 'componentes' : 'README.md'}"></div>
+      <div class="ds-field__error hidden" id="new-file-error" style="margin-top:12px;"><span></span></div>
+    </div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--primary" id="new-file-submit">Criar</button></div>`);
+  const submit = async () => {
+    const target = fileNameInCurrentDirectory($('#new-file-name').value);
+    if (!target) return showModalError($('#new-file-error'), 'Use somente um nome, sem barras.');
+    let result;
+    if (kind === 'directory') {
+      result = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/files`, jsonPost({ kind: 'directory', path: target }));
+    } else {
+      result = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/file`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'If-None-Match': '*' },
+        body: JSON.stringify({ path: target, content: '' }),
+      });
+    }
+    if (result.error) return showModalError($('#new-file-error'), result.error);
+    closeModal();
+    if (kind === 'file') openProjectFile(target); else await renderFiles(null);
+  };
+  $('#new-file-submit').addEventListener('click', submit);
+  $('#new-file-name').addEventListener('keydown', event => { if (event.key === 'Enter') void submit(); });
+  $('#new-file-name').focus();
+}
+
+function openRenameFileModal(doc) {
+  openModal(`
+    <div class="ds-modal__header"><h3 class="ds-modal__title">Renomear arquivo</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><div class="ds-field"><label class="ds-field__label">Novo nome</label><input class="ds-input" id="rename-file-name" value="${esc(doc.name)}"></div><div class="ds-field__error hidden" id="rename-file-error" style="margin-top:12px;"><span></span></div></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--primary" id="rename-file-submit">Renomear</button></div>`);
+  $('#rename-file-submit').addEventListener('click', async () => {
+    const destination = fileNameInCurrentDirectory($('#rename-file-name').value);
+    if (!destination) return showModalError($('#rename-file-error'), 'Use somente um nome, sem barras.');
+    const result = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/file/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'If-Match': doc.etag },
+      body: JSON.stringify({ path: doc.path, destination }),
+    });
+    if (result.error) return showModalError($('#rename-file-error'), result.error);
+    saveFileTabs(activeProjectId, loadFileTabs(activeProjectId).filter(tab => tab.path !== doc.path));
+    closeModal();
+    openProjectFile(result.path);
+  });
+}
+
+function openDeleteFileModal(doc) {
+  openModal(`
+    <div class="ds-modal__header"><h3 class="ds-modal__title">Excluir arquivo</h3><button class="ds-modal__close" data-modal-close><i data-lucide="x" class="ds-icon ds-icon--sm"></i></button></div>
+    <div class="ds-modal__body"><p class="ds-body-sm">Digite o caminho exato para confirmar:</p><code class="ds-code">${esc(doc.path)}</code><input class="ds-input" id="delete-file-confirm" style="margin-top:14px" autocomplete="off"><div class="ds-field__error hidden" id="delete-file-error" style="margin-top:12px;"><span></span></div></div>
+    <div class="ds-modal__footer"><button class="ds-btn ds-btn--ghost" data-modal-close>Cancelar</button><button class="ds-btn ds-btn--danger" id="delete-file-submit">Excluir</button></div>`);
+  $('#delete-file-submit').addEventListener('click', async () => {
+    const result = await api(`/api/projects/${encodeURIComponent(activeProjectId)}/file`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'If-Match': doc.etag },
+      body: JSON.stringify({ path: doc.path, confirmPath: $('#delete-file-confirm').value }),
+    });
+    if (result.error) return showModalError($('#delete-file-error'), result.error);
+    saveFileTabs(activeProjectId, loadFileTabs(activeProjectId).filter(tab => tab.path !== doc.path));
+    closeModal();
+    location.hash = '#/files';
+    await renderFiles(null);
+  });
+}
+
 async function renderFiles(requestedFile = null) {
   const view = $('#view-files');
   if (!activeProjectId) {
@@ -1247,7 +1418,7 @@ async function renderFiles(requestedFile = null) {
   view.innerHTML = `
     <div class="files-header">
       <div><p class="ds-eyebrow">Workspace</p><h2 class="ds-heading-2xl">Arquivos de ${esc(project?.name || 'projeto')}</h2></div>
-      <div class="files-security"><i data-lucide="shield-check" class="ds-icon ds-icon--sm"></i><span>Somente leitura · isolado por projeto</span></div>
+      <div class="files-security"><i data-lucide="shield-check" class="ds-icon ds-icon--sm"></i><span>Leitura e edição protegidas · isolado por projeto</span></div>
     </div>
     <div class="files-shell">
       <aside class="files-explorer">
@@ -1259,6 +1430,10 @@ async function renderFiles(requestedFile = null) {
         </form>
         <div class="file-explorer-title">
           <b>${fileBrowser.search ? 'Resultados' : 'Explorador'}</b>
+          <div class="file-explorer-actions">
+            <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" id="file-new-file" title="Novo arquivo"><i data-lucide="file-plus-2" class="ds-icon ds-icon--xs"></i></button>
+            <button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" id="file-new-folder" title="Nova pasta"><i data-lucide="folder-plus" class="ds-icon ds-icon--xs"></i></button>
+          </div>
           ${fileBrowser.directory && !fileBrowser.search ? `<button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm" data-file-dir="${esc(fileParent(fileBrowser.directory))}" title="Subir"><i data-lucide="corner-left-up" class="ds-icon ds-icon--xs"></i></button>` : ''}
         </div>
         <div class="file-tree">${fileBrowser.search ? searchResultsHtml(fileBrowser.search) : (listing.error ? `<div class="file-empty file-empty--error"><p>${esc(listing.error)}</p></div>` : filesListHtml(entries))}</div>
@@ -1267,7 +1442,7 @@ async function renderFiles(requestedFile = null) {
         <div class="file-tabs chat-tabs">${fileTabsHtml(activeProjectId, doc?.path)}</div>
         <div class="file-toolbar">
           <div class="file-breadcrumbs">${fileBreadcrumbs(fileBrowser.directory)}</div>
-          ${doc && !doc.error ? `<div class="file-meta"><span class="ds-badge ds-badge--info">${esc(doc.viewer)}</span><span>${fmtBytes(doc.size)}</span><button class="ds-btn ds-btn--ghost ds-btn--sm" id="file-diff"><i data-lucide="git-compare" class="ds-icon ds-icon--xs"></i> Diff</button></div>` : ''}
+          ${doc && !doc.error ? `<div class="file-meta"><span class="ds-badge ds-badge--info">${esc(doc.viewer)}</span><span>${fmtBytes(doc.size)}</span>${typeof doc.content === 'string' ? '<button class="ds-btn ds-btn--primary ds-btn--sm" id="file-edit"><i data-lucide="pencil-line" class="ds-icon ds-icon--xs"></i> Editar</button>' : ''}<button class="ds-btn ds-btn--ghost ds-btn--sm" id="file-rename"><i data-lucide="text-cursor-input" class="ds-icon ds-icon--xs"></i> Renomear</button><button class="ds-btn ds-btn--ghost ds-btn--icon ds-btn--sm project-danger" id="file-delete" title="Excluir"><i data-lucide="trash-2" class="ds-icon ds-icon--xs"></i></button><button class="ds-btn ds-btn--ghost ds-btn--sm" id="file-diff"><i data-lucide="git-compare" class="ds-icon ds-icon--xs"></i> Diff</button></div>` : ''}
         </div>
         <div class="file-viewer" id="file-viewer">${fileViewerHtml(doc)}</div>
       </section>
@@ -1299,6 +1474,11 @@ async function renderFiles(requestedFile = null) {
     button.disabled = false;
     refreshIcons();
   });
+  $('#file-new-file')?.addEventListener('click', () => openCreateFileItemModal('file'));
+  $('#file-new-folder')?.addEventListener('click', () => openCreateFileItemModal('directory'));
+  $('#file-edit')?.addEventListener('click', () => startFileEditor(doc));
+  $('#file-rename')?.addEventListener('click', () => openRenameFileModal(doc));
+  $('#file-delete')?.addEventListener('click', () => openDeleteFileModal(doc));
   refreshIcons();
 }
 
@@ -2351,3 +2531,7 @@ refreshIcons();
 loadProjects().then(() => refreshState()).then(router);
 connectSse();
 setInterval(refreshState, 15000);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}

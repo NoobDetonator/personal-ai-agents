@@ -104,3 +104,44 @@ test('diff informa indisponibilidade fora de repositorio Git', () => {
   assert.equal(result.available, false);
   assert.match(result.reason ?? '', /Git/);
 });
+
+test('editor salva atomicamente e rejeita ETag desatualizado', () => {
+  const opened = files.readProjectFile(projectId, 'README.md');
+  const saved = files.writeProjectFile(projectId, 'README.md', '# Atualizado\nseguro', { expectedEtag: opened.etag });
+  assert.equal(saved.content, '# Atualizado\nseguro');
+  assert.notEqual(saved.etag, opened.etag);
+  assert.throws(
+    () => files.writeProjectFile(projectId, 'README.md', 'sobrescrita', { expectedEtag: opened.etag }),
+    (error: unknown) => error instanceof files.ProjectFileError && error.status === 409,
+  );
+  assert.equal(files.readProjectFile(projectId, 'README.md').content, '# Atualizado\nseguro');
+});
+
+test('cria, renomeia e exclui itens sem sobrescrever destinos', () => {
+  const created = files.writeProjectFile(projectId, 'src/novo.ts', 'export const novo = true;', { create: true });
+  assert.equal(created.path, 'src/novo.ts');
+  assert.throws(() => files.writeProjectFile(projectId, 'src/novo.ts', 'x', { create: true }), (error: unknown) =>
+    error instanceof files.ProjectFileError && error.status === 409);
+
+  const renamed = files.renameProjectPath(projectId, 'src/novo.ts', 'src/renomeado.ts', created.etag);
+  assert.equal(renamed.path, 'src/renomeado.ts');
+  const current = files.readProjectFile(projectId, 'src/renomeado.ts');
+  assert.throws(() => files.deleteProjectPath(projectId, 'src/renomeado.ts', 'errado', current.etag), (error: unknown) =>
+    error instanceof files.ProjectFileError && error.status === 400);
+  files.deleteProjectPath(projectId, 'src/renomeado.ts', 'src/renomeado.ts', current.etag);
+  assert.throws(() => files.readProjectFile(projectId, 'src/renomeado.ts'), (error: unknown) =>
+    error instanceof files.ProjectFileError && error.status === 404);
+
+  files.createProjectDirectory(projectId, 'vazia');
+  assert.ok(files.listProjectFiles(projectId).entries.some(entry => entry.path === 'vazia'));
+});
+
+test('lock concorrente nao e removido por outro salvamento', () => {
+  const current = files.readProjectFile(projectId, 'README.md');
+  const lock = path.join(projectRoot, '.README.md.paa-write.lock');
+  fs.writeFileSync(lock, 'outro escritor', { flag: 'wx' });
+  assert.throws(() => files.writeProjectFile(projectId, 'README.md', 'conflito', { expectedEtag: current.etag }), (error: unknown) =>
+    error instanceof files.ProjectFileError && error.status === 409);
+  assert.ok(fs.existsSync(lock));
+  fs.unlinkSync(lock);
+});

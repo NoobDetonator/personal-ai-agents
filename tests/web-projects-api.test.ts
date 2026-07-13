@@ -324,3 +324,56 @@ test('API de dados gerencia memoria, export, settings, diagnostico e auditoria',
   assert.equal(diagnostic.json.status, 'healthy');
   assert.equal(diagnostic.json.web.remoteAccess, false);
 });
+
+test('API de produtividade cobre templates, editor concorrente e backups', async () => {
+  const templates = await api('GET', '/api/project-templates');
+  assert.equal(templates.status, 200);
+  assert.ok(templates.json.some((template: { id: string }) => template.id === 'web-static'));
+  const invalidTemplate = await api('POST', '/api/projects', { name: 'Invalido', templateId: 'nao-existe' });
+  assert.equal(invalidTemplate.status, 400);
+
+  const created = await api('POST', '/api/projects', { name: 'Produtividade HTTP', templateId: 'web-static' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+
+  const opened = await api('GET', `/api/projects/${projectId}/file?path=index.html`);
+  assert.equal(opened.status, 200);
+  const saved = await api('PATCH', `/api/projects/${projectId}/file`, {
+    path: 'index.html', content: '<h1>Atualizado</h1>',
+  }, { 'If-Match': opened.json.etag });
+  assert.equal(saved.status, 200);
+  assert.match(saved.json.document.content, /Atualizado/);
+
+  const stale = await api('PATCH', `/api/projects/${projectId}/file`, {
+    path: 'index.html', content: 'nao sobrescrever',
+  }, { 'If-Match': opened.json.etag });
+  assert.equal(stale.status, 409);
+
+  const newFile = await api('PATCH', `/api/projects/${projectId}/file`, {
+    path: 'novo.txt', content: 'novo',
+  }, { 'If-None-Match': '*' });
+  assert.equal(newFile.status, 201);
+
+  const renamed = await api('POST', `/api/projects/${projectId}/file/rename`, {
+    path: 'novo.txt', destination: 'renomeado.txt',
+  }, { 'If-Match': newFile.json.document.etag });
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.json.path, 'renomeado.txt');
+
+  const removed = await api('DELETE', `/api/projects/${projectId}/file`, {
+    path: 'renomeado.txt', confirmPath: 'renomeado.txt',
+  }, { 'If-Match': renamed.json.document.etag });
+  assert.equal(removed.status, 200);
+
+  const directory = await api('POST', `/api/projects/${projectId}/files`, { kind: 'directory', path: 'componentes' });
+  assert.equal(directory.status, 201);
+
+  const backup = await api('POST', `/api/projects/${projectId}/backups`, {});
+  assert.equal(backup.status, 201);
+  const listed = await api('GET', `/api/projects/${projectId}/backups`);
+  assert.ok(listed.json.some((item: { id: string }) => item.id === backup.json.id));
+  const downloaded = await api('GET', `/api/projects/${projectId}/backup?id=${encodeURIComponent(backup.json.id)}`);
+  assert.equal(downloaded.json.format, 'personal-ai-agents-project-backup');
+  const deleted = await api('DELETE', `/api/projects/${projectId}/backup?id=${encodeURIComponent(backup.json.id)}`, { confirmId: backup.json.id });
+  assert.equal(deleted.status, 200);
+});

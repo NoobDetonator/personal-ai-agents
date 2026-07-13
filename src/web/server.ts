@@ -40,6 +40,10 @@ import {
   readProjectRawFile,
   searchProjectFiles,
   diffProjectFile,
+  writeProjectFile,
+  createProjectDirectory,
+  renameProjectPath,
+  deleteProjectPath,
   ProjectFileError,
 } from '../projects/files-service.js';
 import {
@@ -59,14 +63,22 @@ import {
   patchConversation,
 } from '../projects/conversation-service.js';
 import { startChatRun, cancelRun } from '../chat/run-service.js';
+import { listProjectTemplates } from '../projects/templates.js';
 import { getRun, listRunEvents, getLatestRunForConversation, isTerminalStatus, type RunStatus } from '../db/run-helpers.js';
 import { forkConversation } from '../db/conversation-helpers.js';
+import {
+  createProjectBackup,
+  listProjectBackups,
+  readProjectBackup,
+  deleteProjectBackup,
+  ProjectBackupError,
+} from '../projects/backup-service.js';
 
 // web/ estatico fica na raiz do projeto (fora de src/, sem build)
 const STATIC_DIR = path.join(process.cwd(), 'web');
 const LUCIDE_FILE = path.join(process.cwd(), 'node_modules', 'lucide', 'dist', 'umd', 'lucide.min.js');
 const LOOPBACK_HOST = '127.0.0.1';
-const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BODY_BYTES = 12 * 1024 * 1024;
 const SESSION_TOKEN = randomBytes(32).toString('hex');
 
 let server: http.Server | null = null;
@@ -82,6 +94,8 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
 };
 
 class HttpError extends Error {
@@ -375,12 +389,15 @@ async function handleCreateProject(req: http.IncomingMessage, res: http.ServerRe
   const name = String(body.name ?? '').trim();
   if (!name) throw new HttpError(400, 'Nome do projeto e obrigatorio');
   if (name.length > 120) throw new HttpError(400, 'Nome muito longo');
+  const templateId = body.templateId != null ? String(body.templateId) : 'blank';
+  if (!listProjectTemplates().some(template => template.id === templateId)) throw new HttpError(400, 'Template de projeto invalido.');
 
   const project = createProject({
     name,
     description: body.description != null ? String(body.description) : null,
     defaultModel: body.defaultModel != null ? String(body.defaultModel) : null,
     defaultProvider: body.defaultProvider != null ? String(body.defaultProvider) : null,
+    templateId,
   });
 
   let conversationId: string | null = null;
@@ -474,6 +491,17 @@ function downloadProjectExport(res: http.ServerResponse, projectId: string): voi
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}-export.json"`);
   res.writeHead(200);
   res.end(body);
+}
+
+function downloadProjectBackup(res: http.ServerResponse, projectId: string, backupId: string): void {
+  const backup = readProjectBackup(projectId, backupId);
+  setSecurityHeaders(res);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Length', String(backup.body.length));
+  res.setHeader('Content-Disposition', `attachment; filename="${backup.filename}"`);
+  res.writeHead(200);
+  res.end(backup.body);
 }
 
 function apiDiagnostics(): unknown {
@@ -745,12 +773,20 @@ export function startWebServer(): void {
       }
 
       // --- Projects ---
+      if (method === 'GET' && p === '/api/project-templates') return json(res, 200, listProjectTemplates());
       if (method === 'GET' && p === '/api/projects') return json(res, 200, apiProjects(url.searchParams));
       if (method === 'POST' && p === '/api/projects') return await handleCreateProject(req, res);
 
       const projectFilesMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/files$/i);
       if (method === 'GET' && projectFilesMatch) {
         return json(res, 200, listProjectFiles(projectFilesMatch[1], url.searchParams.get('path') ?? ''));
+      }
+      if (method === 'POST' && projectFilesMatch) {
+        const body = await readBody(req);
+        if (body.kind !== 'directory') throw new HttpError(400, 'Tipo de item invalido.');
+        const result = createProjectDirectory(projectFilesMatch[1], String(body.path ?? ''));
+        auditEvent(projectFilesMatch[1], 'file.create_directory', 'file', result.path);
+        return json(res, 201, result);
       }
 
       const projectRawMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/file\/raw$/i);
@@ -761,6 +797,31 @@ export function startWebServer(): void {
       const projectFileMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/file$/i);
       if (method === 'GET' && projectFileMatch) {
         return json(res, 200, readProjectFile(projectFileMatch[1], url.searchParams.get('path') ?? ''));
+      }
+      if (method === 'PATCH' && projectFileMatch) {
+        const body = await readBody(req);
+        if (typeof body.content !== 'string') throw new HttpError(400, 'Conteudo textual obrigatorio.');
+        const create = req.headers['if-none-match'] === '*';
+        const expectedEtag = typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : null;
+        const document = writeProjectFile(projectFileMatch[1], String(body.path ?? ''), body.content, { create, expectedEtag });
+        auditEvent(projectFileMatch[1], create ? 'file.create' : 'file.update', 'file', document.path, { bytes: document.size });
+        return json(res, create ? 201 : 200, { document });
+      }
+      if (method === 'DELETE' && projectFileMatch) {
+        const body = await readBody(req);
+        const expectedEtag = typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : null;
+        const result = deleteProjectPath(projectFileMatch[1], String(body.path ?? ''), String(body.confirmPath ?? ''), expectedEtag);
+        auditEvent(projectFileMatch[1], 'file.delete', 'file', result.path, { kind: result.kind });
+        return json(res, 200, { success: true, ...result });
+      }
+
+      const projectFileRenameMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/file\/rename$/i);
+      if (method === 'POST' && projectFileRenameMatch) {
+        const body = await readBody(req);
+        const expectedEtag = typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : null;
+        const result = renameProjectPath(projectFileRenameMatch[1], String(body.path ?? ''), String(body.destination ?? ''), expectedEtag);
+        auditEvent(projectFileRenameMatch[1], 'file.rename', 'file', result.path, { source: String(body.path ?? '') });
+        return json(res, 200, result);
       }
 
       const projectSearchMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/search$/i);
@@ -794,6 +855,23 @@ export function startWebServer(): void {
           const body = await readBody(req);
           const removed = deleteProjectMemory(projectId, memoryId, String(body.confirmId ?? ''));
           return json(res, 200, { success: true, removed });
+        }
+      }
+
+      const projectBackupsMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/backups$/i);
+      if (projectBackupsMatch) {
+        if (method === 'GET') return json(res, 200, listProjectBackups(projectBackupsMatch[1]));
+        if (method === 'POST') return json(res, 201, createProjectBackup(projectBackupsMatch[1]));
+      }
+
+      const projectBackupMatch = p.match(/^\/api\/projects\/([a-z0-9-]{1,64})\/backup$/i);
+      if (projectBackupMatch) {
+        const backupId = url.searchParams.get('id') ?? '';
+        if (method === 'GET') return downloadProjectBackup(res, projectBackupMatch[1], backupId);
+        if (method === 'DELETE') {
+          const body = await readBody(req);
+          deleteProjectBackup(projectBackupMatch[1], backupId, String(body.confirmId ?? ''));
+          return json(res, 200, { success: true });
         }
       }
 
@@ -873,7 +951,7 @@ export function startWebServer(): void {
       res.setHeader('Allow', 'GET');
       return json(res, 405, { error: 'metodo nao permitido' });
     } catch (error) {
-      const status = error instanceof HttpError || error instanceof ProjectFileError || error instanceof ProjectDataError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof ProjectFileError || error instanceof ProjectDataError || error instanceof ProjectBackupError ? error.status : 500;
       json(res, status, { error: error instanceof Error ? error.message : 'erro interno' });
     }
   });

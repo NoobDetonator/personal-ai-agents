@@ -1,0 +1,13 @@
+{
+  "name": "Personal AI Agents",
+  "short_name": "Agents",
+  "description": "Workspace local para conversar, coordenar e acompanhar agentes de IA.",
+  "start_url": "/#/projects",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11151f",
+  "theme_color": "#6466f1",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
