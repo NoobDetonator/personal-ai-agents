@@ -22,6 +22,7 @@ import { listProfiles } from '../agents/prompt-composer.js';
 import { resolveAgentProfileProvenance } from '../agents/profile-provenance.js';
 import { getMcpStatus } from '../mcp/manager.js';
 import { getAnalytics, ANALYTICS_RANGES, type AnalyticsRange } from './analytics.js';
+import { WebSecurity } from './security.js';
 import {
   listProjects,
   getProject,
@@ -66,10 +67,10 @@ const STATIC_DIR = path.join(process.cwd(), 'web');
 const LUCIDE_FILE = path.join(process.cwd(), 'node_modules', 'lucide', 'dist', 'umd', 'lucide.min.js');
 const LOOPBACK_HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 64 * 1024;
-const SESSION_COOKIE = 'paa_session';
 const SESSION_TOKEN = randomBytes(32).toString('hex');
 
 let server: http.Server | null = null;
+let webSecurity: WebSecurity | null = null;
 const sseClients = new Set<http.ServerResponse>();
 let unsubscribeBus: (() => void) | null = null;
 let sseKeepAlive: NodeJS.Timeout | null = null;
@@ -109,55 +110,11 @@ function setSecurityHeaders(res: http.ServerResponse): void {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 }
 
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
-}
-
-function isAllowedHost(host: string | undefined, port: number): boolean {
-  if (!host) return false;
-  try {
-    const parsed = new URL(`http://${host}`);
-    const parsedPort = parsed.port ? Number(parsed.port) : 80;
-    return isLoopbackHostname(parsed.hostname) && parsedPort === port;
-  } catch {
-    return false;
-  }
-}
-
-function isTrustedMutationRequest(req: http.IncomingMessage, port: number): boolean {
-  const fetchSite = req.headers['sec-fetch-site'];
-  if (fetchSite === 'cross-site') return false;
-
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  try {
-    const parsed = new URL(origin);
-    const parsedPort = parsed.port ? Number(parsed.port) : 80;
-    return parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname) && parsedPort === port;
-  } catch {
-    return false;
-  }
-}
-
 function tokensEqual(candidate: string | undefined, expected: string): boolean {
   if (!candidate) return false;
   const candidateBuffer = Buffer.from(candidate);
   const expectedBuffer = Buffer.from(expected);
   return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
-}
-
-function hasValidSession(req: http.IncomingMessage): boolean {
-  const bearer = req.headers.authorization?.match(/^Bearer (.+)$/i)?.[1];
-  if (tokensEqual(bearer, SESSION_TOKEN)) return true;
-
-  const cookieHeader = req.headers.cookie ?? '';
-  const sessionCookie = cookieHeader
-    .split(';')
-    .map(part => part.trim())
-    .find(part => part.startsWith(`${SESSION_COOKIE}=`))
-    ?.slice(SESSION_COOKIE.length + 1);
-  return tokensEqual(sessionCookie, SESSION_TOKEN);
 }
 
 export function getWebPanelUrl(port: number = getConfig().web.port): string {
@@ -532,7 +489,15 @@ function apiDiagnostics(): unknown {
     uptimeSec: Math.floor(process.uptime()),
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     database: { quickCheck: quick, counts },
-    web: { bind: LOOPBACK_HOST, remoteAccess: false, sessionAuth: true },
+    web: {
+      bind: LOOPBACK_HOST,
+      remoteAccess: !!getConfig().web.publicUrl,
+      sessionAuth: true,
+      passwordConfigured: webSecurity?.passwordConfigured ?? false,
+      trustProxy: getConfig().web.trustProxy,
+      sessionTtlMinutes: getConfig().web.sessionTtlMinutes,
+      capabilities: getConfig().web.capabilities,
+    },
     generatedAt: new Date().toISOString(),
   };
 }
@@ -674,6 +639,8 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 export function startWebServer(): void {
   const config = getConfig();
   if (!config.web.enabled || server) return;
+  const security = new WebSecurity(config.web, SESSION_TOKEN);
+  webSecurity = security;
 
   unsubscribeBus = onBusEvent(broadcast);
   onPendingChange(() => {
@@ -687,7 +654,7 @@ export function startWebServer(): void {
   server = http.createServer(async (req, res) => {
     try {
       setSecurityHeaders(res);
-      if (!isAllowedHost(req.headers.host, config.web.port)) {
+      if (!security.isAllowedHost(req.headers.host, config.web.port)) {
         return json(res, 403, { error: 'host nao permitido' });
       }
 
@@ -696,12 +663,31 @@ export function startWebServer(): void {
         res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
         return json(res, 405, { error: 'metodo nao permitido' });
       }
-      if (method !== 'GET' && !isTrustedMutationRequest(req, config.web.port)) {
+      if (!security.hasTrustedForwarding(req)) {
+        return json(res, 403, { error: 'proxy HTTPS confiavel obrigatorio' });
+      }
+      if (method !== 'GET' && !security.isTrustedMutation(req, config.web.port)) {
         return json(res, 403, { error: 'origem nao permitida' });
       }
 
       const url = new URL(req.url ?? '/', 'http://localhost');
       const p = url.pathname;
+
+      const loginAssets = ['/login', '/login.html', '/login.js', '/login.css', '/tokens.css', '/foundations.css', '/components.css', '/style.css'];
+      if (method === 'GET' && loginAssets.includes(p)) return serveStatic(p === '/login' ? '/login.html' : p, res);
+      if (method === 'POST' && p === '/api/auth/login') {
+        const body = await readBody(req);
+        const result = security.login(req, String(body.password ?? ''));
+        if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
+        return json(res, result.status, result.error ? { error: result.error } : { success: true, expiresAt: result.expiresAt });
+      }
+      if (method === 'GET' && p === '/api/auth/status') {
+        return json(res, 200, {
+          authenticated: security.authenticate(req),
+          remoteConfigured: security.remoteConfigured,
+          passwordConfigured: security.passwordConfigured,
+        });
+      }
 
       const urlToken = url.searchParams.get('token');
       if (method === 'GET' && p === '/' && urlToken !== null) {
@@ -710,16 +696,29 @@ export function startWebServer(): void {
         }
         res.writeHead(303, {
           'Location': '/',
-          'Set-Cookie': `${SESSION_COOKIE}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/`,
+          'Set-Cookie': security.issueSession(req).cookie,
           'Cache-Control': 'no-store',
         });
         res.end();
         return;
       }
 
-      if (!hasValidSession(req)) {
-        return json(res, 401, { error: 'abra o link seguro exibido no terminal' });
+      if (!security.authenticate(req)) {
+        if (method === 'GET' && !p.startsWith('/api/') && security.isRemoteRequest(req)) {
+          res.writeHead(303, { Location: '/login', 'Cache-Control': 'no-store' });
+          res.end();
+          return;
+        }
+        return json(res, 401, { error: security.isRemoteRequest(req) ? 'autenticacao necessaria' : 'abra o link seguro exibido no terminal' });
       }
+
+      if (method === 'POST' && p === '/api/auth/logout') {
+        res.setHeader('Set-Cookie', security.logout(req));
+        return json(res, 200, { success: true });
+      }
+
+      const permission = security.allowRequest(req, p, method);
+      if (!permission.ok) return json(res, permission.status ?? 403, { error: permission.error });
 
       if (method === 'GET' && p === '/api/events') return handleSse(res);
       if (method === 'GET' && p === '/api/state') return json(res, 200, apiState());
@@ -901,4 +900,5 @@ export function stopWebServer(): void {
     server.close();
     server = null;
   }
+  webSecurity = null;
 }

@@ -82,3 +82,19 @@ Este documento define o modelo de ameaças **antes** de qualquer exposição for
 A Fase 8 deve produzir um checklist marcando cada requisito acima como atendido,
 com teste correspondente (CSRF, sessão expirada, rate limit, permissões
 independentes) antes de qualquer bind fora de loopback.
+
+## Implementacao da Fase 8
+
+- **Status da implementacao:** concluida em 2026-07-12.
+- O servidor continua restrito a `127.0.0.1`; o acesso remoto depende de Tailscale
+  Serve ou reverse proxy HTTPS.
+- Senha forte via `PAA_WEB_PASSWORD`, cookie `HttpOnly; SameSite=Strict; Secure`
+  no acesso remoto e sessoes expirantes.
+- Validacao de Host, origem, proxy confiavel e HTTPS antes da autenticacao.
+- Rate limit separado para login, leitura e mutacoes.
+- Permissoes remotas independentes para chat, arquivos, memorias e configuracoes;
+  shell e navegador irrestritos nao sao expostos.
+- Login, logout, expiracao, rate limit e negativas de permissao sao auditados.
+- Testes de regressao: `tests/web-security.test.ts` e
+  `tests/config-loader.test.ts`.
+- Guia operacional e checklist: `docs/remote-access.md`.

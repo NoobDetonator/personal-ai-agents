@@ -38,6 +38,9 @@ test('config parcial: preserva valores do usuario e materializa defaults', () =>
   assert.equal(loader.getConfig().web.port, 4000);
   const onDisk = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   assert.equal(onDisk.web.port, 4000);
+  assert.equal(onDisk.web.publicUrl, null);
+  assert.equal(onDisk.web.sessionTtlMinutes, 480);
+  assert.deepEqual(onDisk.web.capabilities, { chat: true, files: true, memory: true, settings: true });
   assert.equal(onDisk.defaultAgent, 'aria');
 });
 
@@ -78,6 +81,15 @@ test('valor invalido: arquivo NAO alterado, defaults em memoria', () => {
   fs.writeFileSync(configPath, invalid, 'utf-8');
   loader.loadConfig();
   assert.equal(loader.getConfig().shell.mode, 'confirm');
+  assert.equal(fs.readFileSync(configPath, 'utf-8'), invalid);
+});
+
+test('acesso remoto exige URL HTTPS e preserva configuracao invalida para correcao', () => {
+  const invalid = JSON.stringify({ web: { publicUrl: 'http://agents.example.test', trustProxy: true } }, null, 2);
+  fs.writeFileSync(configPath, invalid, 'utf-8');
+  loader.loadConfig();
+  assert.equal(loader.getConfig().web.publicUrl, null);
+  assert.equal(loader.getConfig().web.trustProxy, false);
   assert.equal(fs.readFileSync(configPath, 'utf-8'), invalid);
 });
 

@@ -2048,6 +2048,13 @@ async function renderSettings() {
         <div><span>Runs</span><b>${diagnostics.database?.counts?.runs ?? 0}</b></div>
         <div><span>Acesso remoto</span><b>${diagnostics.web?.remoteAccess ? 'ativo' : 'desativado'}</b></div>
         <div><span>Sessão protegida</span><b>${diagnostics.web?.sessionAuth ? 'sim' : 'não'}</b></div>
+        <div><span>Senha remota</span><b>${diagnostics.web?.passwordConfigured ? 'configurada' : 'ausente'}</b></div>
+        <div><span>Proxy confi&aacute;vel</span><b>${diagnostics.web?.trustProxy ? 'sim' : 'n&atilde;o'}</b></div>
+        <div><span>Sess&atilde;o (min)</span><b>${diagnostics.web?.sessionTtlMinutes ?? '-'}</b></div>
+        <div><span>Chat remoto</span><b>${diagnostics.web?.capabilities?.chat ? 'permitido' : 'bloqueado'}</b></div>
+        <div><span>Arquivos remotos</span><b>${diagnostics.web?.capabilities?.files ? 'permitido' : 'bloqueado'}</b></div>
+        <div><span>Mem&oacute;rias remotas</span><b>${diagnostics.web?.capabilities?.memory ? 'permitido' : 'bloqueado'}</b></div>
+        <div><span>Ajustes remotos</span><b>${diagnostics.web?.capabilities?.settings ? 'permitido' : 'bloqueado'}</b></div>
       </div>
     </div>
     <div class="ds-card__header"><h3 class="ds-card__title">Comandos aguardando aprovação</h3></div>

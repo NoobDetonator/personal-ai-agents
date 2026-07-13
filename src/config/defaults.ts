@@ -69,6 +69,15 @@ export interface AppConfig {
   web: {
     enabled: boolean;
     port: number;
+    publicUrl: string | null;
+    trustProxy: boolean;
+    sessionTtlMinutes: number;
+    capabilities: {
+      chat: boolean;
+      files: boolean;
+      memory: boolean;
+      settings: boolean;
+    };
   };
   mcp: {
     servers: Record<string, { command: string; args?: string[]; env?: Record<string, string> } | { url: string }>;
@@ -151,6 +160,15 @@ export const CONFIG_SCHEMA = z.object({
   web: z.object({
     enabled: z.boolean(),
     port: z.number().int().min(1).max(65535),
+    publicUrl: z.string().url().startsWith('https://').nullable(),
+    trustProxy: z.boolean(),
+    sessionTtlMinutes: z.number().positive().max(10080),
+    capabilities: z.object({
+      chat: z.boolean(),
+      files: z.boolean(),
+      memory: z.boolean(),
+      settings: z.boolean(),
+    }),
   }),
   mcp: z.object({
     servers: z.record(
@@ -242,6 +260,15 @@ export const DEFAULT_CONFIG: AppConfig = {
   web: {
     enabled: true,
     port: 3131,
+    publicUrl: null,
+    trustProxy: false,
+    sessionTtlMinutes: 480,
+    capabilities: {
+      chat: true,
+      files: true,
+      memory: true,
+      settings: true,
+    },
   },
   mcp: {
     servers: {},

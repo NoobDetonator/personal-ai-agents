@@ -1,0 +1,49 @@
+.login-page {
+  min-height: 100dvh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 5vw, 64px);
+  color: var(--ds-text-primary);
+  background:
+    radial-gradient(circle at 15% 15%, color-mix(in srgb, var(--ds-action-primary) 15%, transparent), transparent 34%),
+    radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--ds-feedback-success) 10%, transparent), transparent 32%),
+    var(--ds-surface-neu-base);
+}
+
+.login-shell { width: min(100%, 460px); }
+.login-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(28px, 6vw, 48px);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: calc(var(--ds-radius-lg) + 8px);
+  background: color-mix(in srgb, var(--ds-surface-neu-base) 94%, transparent);
+  box-shadow: var(--ds-shadow-outset-lg);
+}
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--ds-action-primary), var(--ds-feedback-success), transparent);
+}
+.login-brand { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; }
+.login-brand b { color: var(--ds-action-primary); }
+.login-brand__mark {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--ds-action-primary);
+  border-radius: 9px;
+  transform: rotate(30deg);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--ds-action-primary) 35%, transparent);
+}
+.login-copy { margin: 36px 0 28px; }
+.login-copy h1 { margin: 18px 0 10px; font-size: clamp(27px, 6vw, 38px); line-height: 1.08; letter-spacing: -.035em; }
+.login-copy p,
+.login-foot { color: var(--ds-text-secondary); line-height: 1.6; }
+.login-form { display: grid; gap: 12px; }
+.login-form .ds-input { width: 100%; min-height: 48px; }
+.login-form .ds-btn { width: 100%; min-height: 48px; margin-top: 4px; }
+.login-error { margin: 0; padding: 10px 12px; border-radius: var(--ds-radius-md); color: var(--ds-feedback-danger-text); background: var(--ds-feedback-danger-bg); font-size: var(--ds-caption-size); }
+.login-foot { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid var(--ds-border-subtle); font-size: var(--ds-caption-size); }
